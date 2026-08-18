@@ -1,0 +1,857 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================
+   VIMTECH VMS DESIGN SYSTEM
+   Matching vimtech.in branding
+   ============================ */
+
+:root {
+  /* Core Purple Palette (from vimtech.in) */
+  --vimtech-purple: #800080;
+  --vimtech-purple-deep: #4A124A;
+  --vimtech-purple-light: #a53aed;
+  --vimtech-purple-subtle: #f3e8ff;
+  --vimtech-purple-muted: #e9d5ff;
+
+  /* Gold / Amber Accent */
+  --vimtech-gold: #f59e0b;
+  --vimtech-gold-light: #fbbf24;
+
+  /* Surfaces & Backgrounds */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --bg-card: #ffffff;
+  --bg-header: #ffffff;
+
+  /* Text */
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --text-heading: #4A124A;
+
+  /* Borders */
+  --border-light: #e2e8f0;
+  --border-medium: #cbd5e1;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.02);
+  --shadow-md: 0 4px 18px rgba(74, 18, 74, 0.08), 0 2px 6px rgba(15, 23, 42, 0.04);
+  --shadow-lg: 0 12px 32px rgba(74, 18, 74, 0.12), 0 4px 12px rgba(15, 23, 42, 0.06);
+  --shadow-xl: 0 24px 56px rgba(74, 18, 74, 0.16), 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+/* ===== GLOBAL TYPOGRAPHY & ANIMATIONS ===== */
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  background-color: #f8fafc;
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(128, 0, 128, 0.04) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(99, 102, 241, 0.05) 0px, transparent 50%),
+    radial-gradient(at 50% 50%, rgba(245, 158, 11, 0.02) 0px, transparent 50%);
+  background-attachment: fixed;
+  color: var(--text-primary);
+}
+
+h1, h2, h3, h4, h5, h6, .font-heading {
+  font-family: 'Outfit', 'Inter', sans-serif;
+}
+
+.font-serif {
+  font-family: 'Playfair Display', Cambria, 'Times New Roman', serif;
+}
+
+/* ===== REUSABLE COMPONENT CLASSES ===== */
+
+/* Glassmorphic & Elevated Cards */
+.vms-card {
+  background: #ffffff;
+  border: 1px solid rgba(229, 231, 235, 0.9);
+  border-radius: 18px;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.vms-card:hover {
+  box-shadow: var(--shadow-md);
+  border-color: rgba(128, 0, 128, 0.2);
+}
+
+.vms-hover-lift {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.vms-hover-lift:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+}
+
+/* Elevated card */
+.vms-card-elevated {
+  background: #ffffff;
+  border: 1px solid rgba(229, 231, 235, 0.9);
+  border-radius: 24px;
+  box-shadow: var(--shadow-md);
+}
+
+/* Glass Header Strip */
+.vms-glass-header {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Panel (header, sections) */
+.vms-panel {
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-light);
+}
+
+/* Input fields */
+.vms-input {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  color: var(--text-primary);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 14px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.vms-input:focus {
+  border-color: var(--vimtech-purple);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(128, 0, 128, 0.12);
+}
+
+.vms-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* Primary Button */
+.vms-btn-primary {
+  background: linear-gradient(135deg, var(--vimtech-purple-deep), var(--vimtech-purple));
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 24px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(74, 18, 74, 0.3);
+  transition: all 0.2s ease;
+}
+
+.vms-btn-primary:hover {
+  box-shadow: 0 6px 20px rgba(74, 18, 74, 0.4);
+  transform: translateY(-1px);
+}
+
+/* Secondary Button */
+.vms-btn-secondary {
+  background: var(--bg-secondary);
+  color: var(--vimtech-purple);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 10px 20px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.vms-btn-secondary:hover {
+  background: var(--vimtech-purple-subtle);
+  border-color: var(--vimtech-purple);
+}
+
+/* Gold Accent Button */
+.vms-btn-gold {
+  background: linear-gradient(135deg, #d97706, var(--vimtech-gold));
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 24px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(217, 119, 6, 0.3);
+  transition: all 0.2s ease;
+}
+
+.vms-btn-gold:hover {
+  box-shadow: 0 6px 20px rgba(217, 119, 6, 0.4);
+  transform: translateY(-1px);
+}
+
+/* Danger Button */
+.vms-btn-danger {
+  background: linear-gradient(135deg, #b91c1c, #ef4444);
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 24px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(185, 28, 28, 0.25);
+  transition: all 0.2s ease;
+}
+
+/* Badge */
+.vms-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.vms-badge-purple {
+  background: var(--vimtech-purple-subtle);
+  color: var(--vimtech-purple);
+  border: 1px solid var(--vimtech-purple-muted);
+}
+
+.vms-badge-green {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.vms-badge-amber {
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.vms-badge-red {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+/* Metric Cards */
+.vms-metric {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+.vms-metric-value {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  font-size: 2rem;
+  line-height: 1;
+}
+
+/* Tab Pill Navigation */
+.vms-tab {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-secondary);
+  padding: 4px;
+  border-radius: 14px;
+  border: 1px solid var(--border-light);
+}
+
+.vms-tab-item {
+  padding: 8px 18px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: var(--text-secondary);
+  border: none;
+  background: transparent;
+}
+
+.vms-tab-item.active {
+  background: var(--vimtech-purple);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(74, 18, 74, 0.25);
+}
+
+.vms-tab-item:not(.active):hover {
+  background: var(--vimtech-purple-subtle);
+  color: var(--vimtech-purple);
+}
+
+/* Progress Bars */
+.vms-progress-track {
+  width: 100%;
+  height: 10px;
+  background: #f1f5f9;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.vms-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--vimtech-purple-deep), var(--vimtech-purple-light));
+  transition: width 0.6s ease;
+}
+
+/* Table */
+.vms-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.vms-table thead th {
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  border-bottom: 2px solid var(--border-light);
+}
+
+.vms-table tbody td {
+  padding: 12px 16px;
+  font-size: 13px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.vms-table tbody tr:hover {
+  background: #faf5ff;
+}
+
+/* Modal Overlay */
+.vms-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(74, 18, 74, 0.3);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.vms-modal {
+  width: 100%;
+  background: var(--bg-card);
+  border-radius: 24px;
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+}
+
+/* Header gradient strip matching vimtech.in top-bar */
+.vms-header-strip {
+  background: linear-gradient(135deg, #4A124A, #5e1760);
+  color: #ffffff;
+}
+
+/* Touch-optimized active states */
+.active-touch:active {
+  transform: scale(0.97);
+  transition: transform 0.1s ease;
+}
+
+/* Custom Scrollbars (subtle, light-mode compatible) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Selection color */
+::selection {
+  background: var(--vimtech-purple-muted);
+  color: var(--vimtech-purple-deep);
+}
+
+/* ===== ANIMATION KEYFRAMES ===== */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.5); opacity: 0.4; }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-slideDown {
+  animation: slideDown 0.25s ease-out;
+}
+
+/* ===== DASHBOARD HERO & CARD UTILITIES ===== */
+.vms-header-hero {
+  background: #ffffff;
+  color: #0f172a;
+  border-radius: 1rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e2e8f0;
+  position: relative;
+  overflow: hidden;
+}
+
+.vms-card-glass-dark {
+  background: #ffffff;
+  color: #0f172a;
+  border-radius: 1rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+  border: 1px solid #e2e8f0;
+  position: relative;
+  overflow: hidden;
+}
+
+.vms-card-elevated {
+  background: #ffffff;
+  border-radius: 1.5rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--border-light);
+}
+
+.vms-metric-premium {
+  background: #ffffff;
+  border: 1px solid #f1f5f9;
+  border-radius: 1.25rem;
+  padding: 1.25rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.vms-metric-premium::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #731A73, #a53aed);
+}
+
+.vms-metric-premium.accent-green::before {
+  background: linear-gradient(90deg, #059669, #34d399);
+}
+
+.vms-metric-premium.accent-amber::before {
+  background: linear-gradient(90deg, #d97706, #fbbf24);
+}
+
+.vms-metric-premium.accent-red::before {
+  background: linear-gradient(90deg, #dc2626, #f87171);
+}
+
+.vms-metric-premium.accent-blue::before {
+  background: linear-gradient(90deg, #2563eb, #60a5fa);
+}
+
+.vms-dot-live {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #22c55e;
+  position: relative;
+  display: inline-block;
+}
+
+.vms-dot-live::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background-color: #22c55e;
+  opacity: 0.4;
+  animation: pulseGlow 2s ease-in-out infinite;
+}
+
+/* ===== SCANNER ANIMATIONS & PASS UTILITIES ===== */
+@keyframes scanLaser {
+  0% { top: 0%; opacity: 0.8; }
+  50% { top: 92%; opacity: 1; }
+  100% { top: 0%; opacity: 0.8; }
+}
+
+.vms-scan-beam {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #a53aed, #f59e0b, #a53aed, transparent);
+  box-shadow: 0 0 12px #a53aed, 0 0 20px #f59e0b;
+  animation: scanLaser 2.2s ease-in-out infinite;
+  z-index: 20;
+  pointer-events: none;
+}
+
+@keyframes shimmerFoil {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.vms-foil-strip {
+  background: linear-gradient(135deg, #d97706 0%, #fbbf24 25%, #f59e0b 50%, #fef3c7 75%, #d97706 100%);
+  background-size: 200% 200%;
+  animation: shimmerFoil 4s ease infinite;
+}
+
+.vms-badge-vip {
+  background: linear-gradient(135deg, #78350f, #451a03);
+  color: #fef3c7;
+  border: 1px solid #f59e0b;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
+}
+
+.vms-pass-watermark {
+  background-image: radial-gradient(circle, rgba(115, 26, 115, 0.05) 1.2px, transparent 1.2px);
+  background-size: 16px 16px;
+}
+
+/* Executive Google-Level Security Pass Tokens */
+.vms-pass-foil-header {
+  background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 35%, #31103e 70%, #0f172a 100%);
+  background-size: 200% 200%;
+  position: relative;
+}
+
+.vms-pass-foil-header::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 30%, #38bdf8 70%, #f59e0b 100%);
+}
+
+.vms-qr-scanner-frame {
+  position: relative;
+}
+
+.vms-qr-scanner-frame::before,
+.vms-qr-scanner-frame::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-color: #731A73;
+  pointer-events: none;
+}
+
+.vms-qr-scanner-frame::before {
+  top: 8px;
+  left: 8px;
+  border-top: 2.5px solid #731A73;
+  border-left: 2.5px solid #731A73;
+  border-top-left-radius: 6px;
+}
+
+.vms-qr-scanner-frame::after {
+  bottom: 8px;
+  right: 8px;
+  border-bottom: 2.5px solid #731A73;
+  border-right: 2.5px solid #731A73;
+  border-bottom-right-radius: 6px;
+}
+
+.vms-qr-scanner-frame-tr {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 14px;
+  height: 14px;
+  border-top: 2.5px solid #731A73;
+  border-right: 2.5px solid #731A73;
+  border-top-right-radius: 6px;
+  pointer-events: none;
+}
+
+.vms-qr-scanner-frame-bl {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  width: 14px;
+  height: 14px;
+  border-bottom: 2.5px solid #731A73;
+  border-left: 2.5px solid #731A73;
+  border-bottom-left-radius: 6px;
+  pointer-events: none;
+}
+
+.vms-live-pulse-dot {
+  width: 8px;
+  height: 8px;
+  background-color: #10b981;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  animation: vmsPulse 1.8s infinite;
+}
+
+@keyframes vmsPulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  }
+  70% {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+
+/* ===== PERFECT CAMERA ALIGNMENT & WHITE & VIOLET QR SCANNER STYLING ===== */
+/* Only force video element sizing — do NOT apply to all children (breaks overlay divs) */
+
+#qr-reader-viewport {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+  border-radius: 1.5rem !important;
+}
+
+#qr-reader-viewport video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center !important;
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  border-radius: 1.5rem !important;
+}
+
+#qr-reader-viewport canvas {
+  display: none !important;
+}
+
+/* Hide ALL html5-qrcode internal UI — shaded region, buttons, header, anchor tags, 'scanner paused' text */
+#qr-reader-viewport #qr-shaded-region,
+#qr-reader-viewport #qr-shaded-region div,
+#qr-reader-viewport #qr-shaded-region span {
+  display: none !important;
+}
+
+#qr-reader-viewport button,
+#qr-reader-viewport a,
+#qr-reader-viewport select,
+#qr-reader-viewport span,
+#qr-reader-viewport p,
+#qr-reader-viewport div[style*="text-align"],
+#qr-reader-viewport div[id$="__status_span"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Only the video itself keeps its layout */
+#qr-reader-viewport video {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  border-radius: 1.5rem !important;
+}
+
+/* White & Violet Theme Classes */
+/* NOTE: NO inset shadow — inset glow blocks the camera feed view */
+.violet-glow-box {
+  box-shadow: 0 0 28px rgba(168, 85, 247, 0.55);
+  background: transparent !important;
+}
+
+.violet-glow-line {
+  box-shadow: 0 0 15px #C084FC, 0 0 30px #9333EA;
+}
+
+/* Futuristic Violet & Emerald Scanner Optics */
+.scanner-hud-overlay {
+  background: radial-gradient(circle at center, rgba(115, 26, 115, 0.05) 0%, rgba(15, 23, 42, 0.6) 100%);
+  pointer-events: none;
+}
+
+.scanner-radar-sweep {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: conic-gradient(from 0deg at 50% 50%, rgba(192, 132, 252, 0.35) 0deg, transparent 60deg, transparent 360deg);
+  animation: radarSpin 2.5s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes radarSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.violet-corner-bracket {
+  position: absolute;
+  width: 36px;
+  height: 36px;
+  border-color: #a855f7;
+  pointer-events: none;
+  z-index: 35;
+  filter: drop-shadow(0 0 12px rgba(168, 85, 247, 0.9));
+}
+
+.violet-bracket-tl {
+  top: -2px;
+  left: -2px;
+  border-top-width: 4px;
+  border-left-width: 4px;
+  border-top-left-radius: 14px;
+}
+
+.violet-bracket-tr {
+  top: -2px;
+  right: -2px;
+  border-top-width: 4px;
+  border-right-width: 4px;
+  border-top-right-radius: 14px;
+}
+
+.violet-bracket-bl {
+  bottom: -2px;
+  left: -2px;
+  border-bottom-width: 4px;
+  border-left-width: 4px;
+  border-bottom-left-radius: 14px;
+}
+
+.violet-bracket-br {
+  bottom: -2px;
+  right: -2px;
+  border-bottom-width: 4px;
+  border-right-width: 4px;
+  border-bottom-right-radius: 14px;
+}
+
+/* High-Tech Animated Laser Line */
+@keyframes laserScanlineMove {
+  0% {
+    top: 5%;
+    opacity: 0.9;
+  }
+  50% {
+    top: 92%;
+    opacity: 1;
+  }
+  100% {
+    top: 5%;
+    opacity: 0.9;
+  }
+}
+
+.animate-laser-scanline {
+  animation: laserScanlineMove 2s ease-in-out infinite;
+}
+
+/* Perforated Receipt Styling */
+.receipt-perforation {
+  position: relative;
+}
+.receipt-perforation::before,
+.receipt-perforation::after {
+  content: '';
+  position: absolute;
+  top: -12px;
+  width: 24px;
+  height: 24px;
+  background-color: #f8fafc;
+  border-radius: 50%;
+  z-index: 10;
+}
+.receipt-perforation::before {
+  left: -20px;
+}
+.receipt-perforation::after {
+  right: -20px;
+}
+
+
+/* ===== DEDICATED 1-PAGE VISITOR PASS PRINT STYLING ===== */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  #printable-pass, #printable-pass * {
+    visibility: visible !important;
+  }
+
+  #printable-pass {
+    position: absolute !important;
+    left: 50% !important;
+    top: 15px !important;
+    transform: translateX(-50%) !important;
+    width: 92% !important;
+    max-width: 500px !important;
+    margin: 0 auto !important;
+    padding: 24px !important;
+    border: 2.5px solid #731A73 !important;
+    border-radius: 16px !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    page-break-inside: avoid !important;
+  }
+
+  .no-print, button, nav, header {
+    display: none !important;
+  }
+}
+
+
+

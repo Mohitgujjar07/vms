@@ -1,0 +1,30 @@
+{
+  "college_id": "col-vimtech-001",
+  "app_name": "VIMTECH VMS",
+  "display_name": "VIMTECH",
+  "legal_name": "Vaisiri Institute of Management & Technology",
+  "tagline": "VIDYAVAHINI GROUP",
+  "package_id": "in.vidyavahini.vimtech.vms",
+  "logo_url": "/Screenshot 2026-07-23 121324.png",
+  "primary_color": "#5B2C82",
+  "secondary_color": "#8E44AD",
+  "address": "2nd Stage, Sri Sharadadevi Nagar, Sai Baba Temple Road, Tumkur – 572103",
+  "contact_phone": "+91 8217230788 / +91 8217230766",
+  "contact_email": "info@vimtech.in",
+  "affiliations": [
+    "Approved by AICTE",
+    "Affiliated to Tumkur University",
+    "Recognized by Govt. of Karnataka"
+  ],
+  "departments": [
+    "BCA - Computer Applications",
+    "BCA (AI & ML)",
+    "BBA - Business Administration",
+    "MBA - Master of Business Administration",
+    "Career Development Center (CDC)",
+    "Internal Quality Assurance Cell (IQAC)",
+    "Administration & Principal Office",
+    "Physical Education & Sports",
+    "Kannada & English Languages"
+  ]
+}

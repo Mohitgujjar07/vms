@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <rect width="200" height="200" rx="30" fill="#ffffff"/>
+  <!-- Stylized VGI Logo in #731A73 -->
+  <g fill="#731A73">
+    <!-- Left Top arm of V -->
+    <polygon points="15,25 60,25 50,75 15,75"/>
+    <!-- Left Bottom arm of V -->
+    <polygon points="52,85 88,185 100,185 57,85"/>
+    <!-- Right long diagonal arm of V -->
+    <polygon points="88,185 100,185 185,25 155,25"/>
+    <!-- Intersecting G & I emblem flourish on top right -->
+    <!-- G Outer Ring -->
+    <path d="M 125,15 C 95,15 80,38 80,62 C 80,88 100,105 130,105 C 158,105 178,88 178,60 L 135,60 L 135,74 L 162,74 C 160,86 148,94 130,94 C 110,94 95,80 95,62 C 95,44 108,26 128,26 C 144,26 156,34 163,45 L 176,34 C 166,19 148,15 125,15 Z"/>
+    <!-- I serif bar -->
+    <rect x="165" y="50" width="30" height="42" rx="2"/>
+    <rect x="155" y="46" width="38" height="6"/>
+    <rect x="155" y="90" width="38" height="6"/>
+  </g>
+</svg>
