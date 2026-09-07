@@ -1,16 +1,20 @@
-import jsPDF from 'jspdf';
+import type jsPDF from 'jspdf';
 import { Visit } from '../types';
 import { generatePassCanvas, buildWhatsAppPassMessage } from './passImageGenerator';
 
 /**
- * Generates an Executive High-Definition VIMTECH Digital Gate Pass as a jsPDF document
+ * Generates an Executive High-Definition Digital Gate Pass as a jsPDF document.
+ * The PDF engine is lazy-loaded so it never bloats the main app bundle.
  */
 export const generatePassPdf = async (visit: Visit): Promise<jsPDF> => {
   const canvas = await generatePassCanvas(visit);
   const imgData = canvas.toDataURL('image/png');
 
+  // Lazy-load the PDF engine (~500 kB) on first use
+  const { default: JsPdfCtor } = await import('jspdf');
+
   // Create A5 Executive Card PDF Document (148mm x 210mm)
-  const doc = new jsPDF({
+  const doc = new JsPdfCtor({
     orientation: 'portrait',
     unit: 'mm',
     format: 'a5',
@@ -43,7 +47,7 @@ export const generatePassPdf = async (visit: Visit): Promise<jsPDF> => {
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(100, 110, 120);
   doc.text(`Official Document ID: VMS-PDF-${visit.qr_token || 'PASS'} • Generated: ${new Date().toLocaleString()}`, 74, 185, { align: 'center' });
-  doc.text(`Visitor Phone: ${visit.visitor_phone || 'N/A'} • Campus: VIMTECH Main Campus, Tumkur`, 74, 189, { align: 'center' });
+  doc.text(`Visitor Phone: ${visit.visitor_phone || 'N/A'} • Centralised Campus VMS`, 74, 189, { align: 'center' });
 
   return doc;
 };
@@ -54,7 +58,7 @@ export const generatePassPdf = async (visit: Visit): Promise<jsPDF> => {
 export const downloadPassPdf = async (visit: Visit): Promise<string> => {
   const doc = await generatePassPdf(visit);
   const visitorName = (visit.visitor_name || 'Visitor').replace(/\s+/g, '_');
-  const filename = `VIMTECH_Digital_Gate_Pass_${visitorName}.pdf`;
+  const filename = `Digital_Gate_Pass_${visitorName}.pdf`;
   doc.save(filename);
   return filename;
 };
@@ -85,7 +89,7 @@ export const shareWhatsAppPassPdfDirectly = async (
 
   const phoneWithCountryCode = digitsOnly.length === 10 ? `91${digitsOnly}` : digitsOnly;
   const visitorName = visit.visitor_name || 'Visitor';
-  const filename = `VIMTECH_Digital_Gate_Pass_${visitorName.replace(/\s+/g, '_')}.pdf`;
+  const filename = `Digital_Gate_Pass_${visitorName.replace(/\s+/g, '_')}.pdf`;
 
   // 1. Generate PDF Pass Blob & Trigger Local Device Download
   let pdfBlob: Blob | null = null;
@@ -115,7 +119,7 @@ export const shareWhatsAppPassPdfDirectly = async (
       const pdfFile = new File([pdfBlob], filename, { type: 'application/pdf' });
       if (navigator.canShare({ files: [pdfFile] })) {
         await navigator.share({
-          title: 'VIMTECH Digital Gate Pass PDF',
+          title: 'Digital Gate Pass PDF',
           text: message,
           files: [pdfFile]
         });

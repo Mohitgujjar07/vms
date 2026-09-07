@@ -1,8 +1,8 @@
 /**
- * VMS Security Service — Blacklist & Emergency SOS management
+ * VMS Security Service — Blacklist management
  */
 
-import { BlacklistEntry, EmergencySosAlert } from '../types';
+import { BlacklistEntry } from '../types';
 import { supabase, isCloudReady, safeQuery, safeMutation } from './api/supabaseApi';
 import { localDb } from '../offline/db';
 import { auditService } from './auditService';
@@ -11,14 +11,11 @@ import { INITIAL_BLACKLIST } from './mockData';
 
 class SecurityService {
   private blacklist: BlacklistEntry[] = [];
-  private sosAlerts: EmergencySosAlert[] = [];
-  private sosBroadcastChannel: BroadcastChannel | null = null;
 
   constructor() {
-    this.initBroadcastChannel();
-    this.loadSosAlerts();
-    this.setupSosSync();
     this.setupSupabaseRealtime();
+    // Rehydrate blacklist from IndexedDB cache + cloud so the gate survives restarts
+    void this.rehydrateBlacklist();
   }
 
   private setupSupabaseRealtime(): void {
@@ -26,13 +23,8 @@ class SecurityService {
       try {
         supabase
           .channel('vms-realtime-security')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'emergency_sos_alerts' }, () => {
-            this.getActiveSosAlerts().then(() => {
-              eventBus.emit('sos:raised');
-              eventBus.emit('data:changed');
-            });
-          })
           .on('postgres_changes', { event: '*', schema: 'public', table: 'blacklist' }, () => {
+            void this.rehydrateBlacklist();
             eventBus.emit('blacklist:updated');
             eventBus.emit('data:changed');
           })
@@ -43,72 +35,62 @@ class SecurityService {
     }
   }
 
-  private initBroadcastChannel(): void {
-    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-      try {
-        this.sosBroadcastChannel = new BroadcastChannel('vimtech_vms_sos_channel');
-      } catch (e) {
-        console.warn('BroadcastChannel initialization error:', e);
-      }
-    }
-  }
-
-  // ─── SOS INTERNAL SYNC ────────────────────────────────────────
-
-  private loadSosAlerts(): void {
-    try {
-      const stored = localStorage.getItem('vimtech_vms_sos_alerts');
-      if (stored) {
-        this.sosAlerts = JSON.parse(stored);
-      }
-    } catch (e) {
-      console.warn('Failed to load SOS alerts from localStorage:', e);
-    }
-  }
-
-  private saveSosAlerts(): void {
-    try {
-      localStorage.setItem('vimtech_vms_sos_alerts', JSON.stringify(this.sosAlerts));
-      if (this.sosBroadcastChannel) {
-        try {
-          this.sosBroadcastChannel.postMessage({ type: 'SOS_UPDATED', timestamp: Date.now() });
-        } catch (e) { /* silent */ }
-      }
-    } catch (e) {
-      console.warn('Failed to save SOS alerts to localStorage:', e);
-    }
-  }
-
-  private setupSosSync(): void {
-    if (typeof window === 'undefined') return;
-    window.addEventListener('storage', (e) => {
-      if (e.key === 'vimtech_vms_sos_alerts') {
-        this.loadSosAlerts();
-        eventBus.emit('sos:raised');
-        eventBus.emit('data:changed');
-      }
-    });
-    if (this.sosBroadcastChannel) {
-      this.sosBroadcastChannel.onmessage = () => {
-        this.loadSosAlerts();
-        eventBus.emit('sos:raised');
-        eventBus.emit('data:changed');
-      };
-    }
-  }
-
   // ─── BLACKLIST ────────────────────────────────────────────────
 
+  /** Normalize any phone format ('+91 98765 43210', '9876543210', etc.) to last 10 digits */
+  private normalizePhone(p: string): string {
+    return (p || '').replace(/\D/g, '').slice(-10);
+  }
+
+  /**
+   * Rebuild the in-memory blacklist gate from (1) local IndexedDB cache and
+   * (2) the Supabase cloud when reachable. Guarantees protection survives restarts.
+   */
+  private async rehydrateBlacklist(): Promise<void> {
+    // 1. Local cache first — works with zero network
+    try {
+      const localEntries = await localDb.local_blacklist.toArray();
+      const byId = new Map(this.blacklist.map(b => [b.id, b]));
+      localEntries.forEach(e => byId.set(e.id, e));
+      this.blacklist = Array.from(byId.values());
+    } catch (e) { /* silent */ }
+
+    // 2. Cloud refresh when available
+    if (isCloudReady() && supabase) {
+      try {
+        const { data, error } = await supabase.from('blacklist').select('*');
+        if (!error && data) {
+          const byId = new Map(this.blacklist.map(b => [b.id, b]));
+          (data as BlacklistEntry[]).forEach(cloudEntry => {
+            byId.set(cloudEntry.id, cloudEntry);
+            localDb.local_blacklist.put(cloudEntry).catch(() => {});
+          });
+          this.blacklist = Array.from(byId.values());
+          eventBus.emit('data:changed');
+        }
+      } catch (e) {
+        console.warn('Blacklist cloud rehydration notice:', e);
+      }
+    }
+  }
+
   async checkBlacklist(phone: string, branchId: string, collegeId?: string): Promise<BlacklistEntry | null> {
-    const cleanPhone = phone.trim();
+    const target = this.normalizePhone(phone);
+    if (!target) return null;
     const entry = this.blacklist.find(b =>
-      b.visitor_phone === cleanPhone &&
-      (b.branch_id === branchId || (collegeId && b.college_id === collegeId))
+      this.normalizePhone(b.visitor_phone) === target &&
+      (b.branch_id === branchId ||
+       (!!collegeId && b.college_id === collegeId) ||
+       b.scope === 'college')
     );
     return entry || null;
   }
 
   async getBlacklist(branchId?: string, collegeId?: string): Promise<BlacklistEntry[]> {
+    // Ensure memory reflects local cache + cloud before filtering
+    if (this.blacklist.length === 0) {
+      await this.rehydrateBlacklist();
+    }
     return this.blacklist.filter(b =>
       (branchId && b.branch_id === branchId) ||
       (collegeId && b.college_id === collegeId)
@@ -137,7 +119,7 @@ class SecurityService {
     const createdBy = entry.createdBy || entry.added_by_profile_id;
 
     const newEntry: BlacklistEntry = {
-      id: `blk-${Date.now()}`,
+      id: crypto.randomUUID(),
       scope: entry.scope,
       branch_id: branchId,
       college_id: collegeId,
@@ -148,6 +130,41 @@ class SecurityService {
     };
     this.blacklist.push(newEntry);
     await localDb.local_blacklist.put(newEntry);
+
+    // Push to cloud immediately when possible; otherwise enqueue for the offline sync engine
+    let pushed = false;
+    if (isCloudReady() && supabase) {
+      const res = await safeMutation(
+        () => supabase!.from('blacklist').upsert({
+          id: newEntry.id,
+          scope: newEntry.scope,
+          branch_id: newEntry.branch_id,
+          college_id: newEntry.college_id,
+          visitor_phone: newEntry.visitor_phone,
+          reason: newEntry.reason,
+          created_by: newEntry.created_by || null,
+          escalated_to_college: !!newEntry.escalated_to_college,
+          created_at: newEntry.created_at
+        }),
+        'add blacklist entry'
+      );
+      pushed = res;
+    }
+    if (!pushed) {
+      try {
+        const { syncEngine } = await import('../offline/syncEngine');
+        await localDb.sync_queue.put({
+          id: `blacklist-${newEntry.id}`,
+          type: 'add_blacklist',
+          payload: { entry: newEntry },
+          status: 'pending',
+          retry_count: 0,
+          created_at: new Date().toISOString()
+        });
+        syncEngine.triggerSync();
+      } catch (e) { /* silent */ }
+    }
+
     await auditService.logAudit(createdBy, 'Admin', 'add_to_blacklist', entry.scope, { phone, reason: entry.reason });
     eventBus.emit('blacklist:updated', { action: 'add', phone });
     return newEntry;
@@ -156,6 +173,12 @@ class SecurityService {
   async removeFromBlacklist(id: string): Promise<void> {
     this.blacklist = this.blacklist.filter(b => b.id !== id);
     await localDb.local_blacklist.delete(id);
+    if (isCloudReady() && supabase) {
+      await safeMutation(
+        () => supabase!.from('blacklist').delete().eq('id', id),
+        'remove blacklist entry'
+      );
+    }
     eventBus.emit('blacklist:updated', { action: 'remove', id });
   }
 
@@ -165,92 +188,15 @@ class SecurityService {
     entry.scope = 'college';
     entry.escalated_to_college = true;
     await localDb.local_blacklist.put(entry);
-    await auditService.logAudit('usr-vimtech-principal', 'Branch Principal', 'escalate_blacklist', 'college', { entry_id: id });
+    if (isCloudReady() && supabase) {
+      await safeMutation(
+        () => supabase!.from('blacklist').update({ scope: 'college', escalated_to_college: true }).eq('id', id),
+        'escalate blacklist entry'
+      );
+    }
+    await auditService.logAudit(undefined, 'Branch Principal', 'escalate_blacklist', 'college', { entry_id: id });
     eventBus.emit('blacklist:updated', { action: 'escalate', id });
     return entry;
-  }
-
-  // ─── EMERGENCY SOS ALERTS ────────────────────────────────────
-
-  async raiseSosAlert(branchId: string, receptionistId: string, receptionistName: string, message: string, branchName?: string): Promise<EmergencySosAlert> {
-    const alert: EmergencySosAlert = {
-      id: `sos-${Date.now()}`,
-      branch_id: branchId || '22222222-2222-2222-2222-222222222222',
-      branch_name: branchName || 'Main Campus',
-      receptionist_id: receptionistId || 'usr-reception',
-      receptionist_name: receptionistName || 'Front Desk Duty Officer',
-      message: message || 'Urgent assistance requested at front desk.',
-      created_at: new Date().toISOString(),
-      is_active: true
-    };
-    this.sosAlerts.unshift(alert);
-    this.saveSosAlerts();
-
-    if (isCloudReady() && supabase) {
-      await safeMutation(
-        () => supabase!.from('emergency_sos_alerts').insert({
-          id: alert.id,
-          branch_id: alert.branch_id,
-          branch_name: alert.branch_name,
-          receptionist_id: alert.receptionist_id || null,
-          receptionist_name: alert.receptionist_name,
-          message: alert.message,
-          is_active: true,
-          created_at: alert.created_at
-        }),
-        'insert SOS alert'
-      );
-    }
-
-    await auditService.logAudit(receptionistId, receptionistName, 'raise_emergency_sos', 'branch', { branch_id: branchId, message });
-    eventBus.emit('sos:raised', { alertId: alert.id, branchId });
-    eventBus.emit('data:changed');
-    return alert;
-  }
-
-  async getActiveSosAlerts(branchId?: string): Promise<EmergencySosAlert[]> {
-    this.loadSosAlerts();
-    if (isCloudReady() && supabase) {
-      try {
-        let query = supabase.from('emergency_sos_alerts').select('*').eq('is_active', true).order('created_at', { ascending: false });
-        if (branchId) {
-          query = query.eq('branch_id', branchId);
-        }
-        const { data, error } = await query;
-        if (data && !error && data.length > 0) {
-          const cloudAlerts = data as EmergencySosAlert[];
-          cloudAlerts.forEach(ca => {
-            const idx = this.sosAlerts.findIndex(a => a.id === ca.id);
-            if (idx !== -1) this.sosAlerts[idx] = ca;
-            else this.sosAlerts.push(ca);
-          });
-          this.saveSosAlerts();
-        }
-      } catch (e) {
-        console.warn('Supabase getActiveSosAlerts fallback:', e);
-      }
-    }
-    return this.sosAlerts.filter(a => a.is_active && (!branchId || a.branch_id === branchId || !a.branch_id));
-  }
-
-  async dismissSosAlert(alertId: string): Promise<void> {
-    const alert = this.sosAlerts.find(a => a.id === alertId);
-    if (alert) {
-      alert.is_active = false;
-    }
-    // Also mark active in array
-    this.sosAlerts = this.sosAlerts.map(a => a.id === alertId ? { ...a, is_active: false } : a);
-    this.saveSosAlerts();
-
-    if (isCloudReady() && supabase) {
-      await safeMutation(
-        () => supabase!.from('emergency_sos_alerts').update({ is_active: false }).eq('id', alertId),
-        'dismiss SOS alert'
-      );
-    }
-
-    eventBus.emit('sos:dismissed', { alertId });
-    eventBus.emit('data:changed');
   }
 
   // ─── STATE ACCESS ────────────────────────────────────────────

@@ -45,10 +45,25 @@ class VisitService {
         await localDb.local_visits.bulkPut(this.visits);
         await localDb.local_visitors.bulkPut(this.visitors);
       } else {
+        const dbVisitors = await localDb.local_visitors.toArray();
+        if (dbVisitors && dbVisitors.length > 0) {
+          const vMap = new Map(this.visitors.map(v => [v.id, v]));
+          dbVisitors.forEach(v => vMap.set(v.id, v));
+          this.visitors = Array.from(vMap.values());
+        }
+
         const dbVisits = await localDb.local_visits.toArray();
         if (dbVisits && dbVisits.length > 0) {
           const map = new Map(this.visits.map(v => [v.id, v]));
+          const vMap = new Map(this.visitors.map(v => [v.id, v]));
+
           dbVisits.forEach(v => {
+            // Heal any missing visitor name/phone using visitor lookup
+            if ((!v.visitor_name || !v.visitor_phone) && v.visitor_id && vMap.has(v.visitor_id)) {
+              const matched = vMap.get(v.visitor_id)!;
+              v.visitor_name = v.visitor_name || matched.name;
+              v.visitor_phone = v.visitor_phone || matched.phone;
+            }
             map.set(v.id, { ...(map.get(v.id) || {}), ...v });
           });
           this.visits = Array.from(map.values()).sort(
@@ -59,65 +74,6 @@ class VisitService {
     } catch (e) {
       console.warn('LocalDB seed notification:', e);
     }
-  }
-
-  // ─── CLOUD PHOTO STORAGE ──────────────────────────────────────
-
-  async uploadVisitorPhoto(photoDataUrl: string, fileName?: string): Promise<string> {
-    if (!photoDataUrl || !photoDataUrl.startsWith('data:image')) {
-      return photoDataUrl;
-    }
-
-    // Automatically compress high-resolution camera captures to max 800x800 JPEG (~100KB)
-    let processedUrl = photoDataUrl;
-    try {
-      const { compressImageDataUrl } = await import('../utils/imageCompressor');
-      processedUrl = await compressImageDataUrl(photoDataUrl, 800, 800, 0.82);
-    } catch (e) { /* fallback to original */ }
-
-    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
-    const arr = processedUrl.split(',');
-    const mimeMatch = arr[0].match(/:(.*?);/);
-    const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
-
-    if (!allowedMimeTypes.includes(mime)) {
-      console.warn('Rejected file upload due to unsupported MIME type:', mime);
-      return 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=300&q=80';
-    }
-
-    if (isCloudReady() && supabase) {
-      try {
-        const bstr = atob(arr[1]);
-        let n = bstr.length;
-        if (n > 5 * 1024 * 1024) { // 5MB Limit
-          throw new Error('Image exceeds 5MB size limit.');
-        }
-        const u8arr = new Uint8Array(n);
-        while (n--) {
-          u8arr[n] = bstr.charCodeAt(n);
-        }
-        const fileBlob = new Blob([u8arr], { type: mime });
-        const cleanName = (fileName || 'visitor').replace(/[^a-zA-Z0-9]/g, '_');
-        const path = `visitor-photos/${cleanName}_${Date.now()}.jpg`;
-
-        const { error: uploadError } = await supabase.storage
-          .from('visitor-photos')
-          .upload(path, fileBlob, { contentType: mime, upsert: true });
-
-        if (!uploadError) {
-          const { data: publicUrlData } = supabase.storage
-            .from('visitor-photos')
-            .getPublicUrl(path);
-
-          if (publicUrlData?.publicUrl) {
-            return publicUrlData.publicUrl;
-          }
-        }
-      } catch (err) {
-        console.warn('Supabase visitor photo upload fallback:', err);
-      }
-    }
-    return photoDataUrl;
   }
 
   // ─── VISITOR LOOKUP ──────────────────────────────────────────
@@ -141,7 +97,7 @@ class VisitService {
     visitorName: string;
     visitorPhone: string;
     visitorPhotoUrl?: string;
-    hostId: string;
+    hostId?: string;
     purpose: string;
   }): Promise<{ visit: Visit; isOffline: boolean }> {
     const { branchId, receptionistId, visitorPhotoUrl, hostId } = data;
@@ -184,29 +140,25 @@ class VisitService {
       throw new Error(`This visitor (${cleanName} - ${cleanPhone}) is already checked in. Check them out first if this is a mistake.`);
     }
 
-    // 3. Photo upload or fallback
-    let finalPhotoUrl = visitorPhotoUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=300&q=80';
-    if (visitorPhotoUrl && visitorPhotoUrl.startsWith('data:image')) {
-      finalPhotoUrl = await this.uploadVisitorPhoto(visitorPhotoUrl, cleanName);
-    }
+    // 3. PHOTO POLICY: captured photos are EPHEMERAL by design.
+    // They live only in React state for the instant printable pass and are
+    // NEVER uploaded to storage, written to the database, or cached in IndexedDB.
 
-    // 4. Visitor profile lookup or registration
+    // 4. Visitor profile lookup or registration (photo_url intentionally left empty)
     let visitor = await this.lookupVisitorByPhone(cleanPhone);
     if (!visitor) {
       visitor = {
-        id: `vis-${Date.now()}`,
+        id: crypto.randomUUID(),
         name: cleanName,
         phone: cleanPhone,
-        photo_url: finalPhotoUrl,
         created_at: new Date().toISOString()
       };
       this.visitors.push(visitor);
-    } else if (visitorPhotoUrl) {
-      visitor.photo_url = finalPhotoUrl;
     }
 
-    // 4. Host details lookup
-    const host = directoryService.findHost(hostId);
+    // Host selection removed from the check-in flow — host fields are optional
+    // legacy metadata only (populated when a visit still carries one).
+    const host = hostId ? directoryService.findHost(hostId) : undefined;
 
     // 5. Generate dynamic tenant QR token
     const br = directoryService.getBranchesArray().find(b => b.id === branchId);
@@ -219,10 +171,10 @@ class VisitService {
     expiry.setHours(23, 59, 59, 999);
 
     const visit: Visit = {
-      id: `vst-${Date.now()}`,
+      id: crypto.randomUUID(),
       visitor_id: visitor.id,
       branch_id: branchId,
-      host_id: hostId,
+      host_id: hostId || null,
       purpose: cleanPurpose,
       status: 'inside',
       qr_token: qrToken,
@@ -233,15 +185,15 @@ class VisitService {
       created_at: new Date().toISOString(),
       visitor_name: visitor.name,
       visitor_phone: visitor.phone,
-      visitor_photo_url: visitor.photo_url,
-      host_name: host?.name || 'Staff Member',
-      host_department: host?.department_or_class || 'General',
+      // Persisted record carries NO photo (ephemeral-by-design policy)
+      host_name: host?.name || '',
+      host_department: host?.department_or_class || '',
       sync_status: navigator.onLine ? 'synced' : 'pending'
     };
 
     this.visits.unshift(visit);
 
-    // 6. Queue IndexedDB persistence & cloud sync
+    // 6. Queue IndexedDB persistence & cloud sync (photo-free payload)
     const result = await syncEngine.queueCheckIn(visit, visitor);
 
     await auditService.logAudit(receptionistId, data.receptionistName, 'visit_created', 'branch', {
@@ -251,7 +203,14 @@ class VisitService {
     });
 
     eventBus.emit('visit:created', { visitId: visit.id, branchId });
-    return result;
+
+    // 7. Attach the captured photo ONLY to the returned copy — used exclusively by
+    // the pass UI during this session. It is never queued, synced, or persisted.
+    const enrichedVisit: Visit = visitorPhotoUrl
+      ? { ...result.visit, visitor_photo_url: visitorPhotoUrl }
+      : result.visit;
+
+    return { visit: enrichedVisit, isOffline: result.isOffline };
   }
 
   async processCheckOut(qrToken: string, branchId: string, rating?: number | null, feedbackComment?: string | null): Promise<{ visit: Visit; isOffline: boolean }> {
@@ -260,7 +219,8 @@ class VisitService {
 
     if (!visit) {
       try {
-        const dbMatch = await localDb.local_visits.filter(v => v.qr_token.toLowerCase() === cleanToken).first();
+        const dbMatch = await localDb.local_visits.where('qr_token').equals(qrToken.trim()).first()
+          || await localDb.local_visits.filter(v => v.qr_token.toLowerCase() === cleanToken).first();
         if (dbMatch) {
           visit = dbMatch;
           this.visits.unshift(visit);
@@ -349,24 +309,68 @@ class VisitService {
   async getVisits(branchId?: string, collegeId?: string): Promise<Visit[]> {
     if (isCloudReady() && supabase) {
       try {
-        let query = supabase.from('visits').select('*').order('check_in_time', { ascending: false });
+        // Fetch cloud visitors to keep visitor directory updated
+        const { data: vData } = await supabase.from('visitors').select('*');
+        if (vData) {
+          const vMap = new Map<string, Visitor>();
+          vData.forEach((v: Visitor) => vMap.set(v.id, v));
+          this.visitors = Array.from(vMap.values());
+          try {
+            await localDb.local_visitors.clear();
+            await localDb.local_visitors.bulkPut(vData);
+          } catch (e) { /* silent */ }
+        }
+
+        let query = supabase
+          .from('visits')
+          .select('*, visitors(id, name, phone, photo_url), hosts(id, name, department_or_class)')
+          .order('check_in_time', { ascending: false });
         if (branchId) {
           query = query.eq('branch_id', branchId);
         }
         const { data, error } = await query;
-        if (data && !error && data.length > 0) {
-          const cloudVisits = data as Visit[];
-          cloudVisits.forEach(cv => {
-            const idx = this.visits.findIndex(v => v.id === cv.id);
-            if (idx !== -1) {
-              this.visits[idx] = { ...this.visits[idx], ...cv };
-            } else {
-              this.visits.push(cv);
-            }
+        if (data && !error) {
+          const visitorMap = new Map(this.visitors.map(v => [v.id, v]));
+          const cloudVisits: Visit[] = data.map((row: any) => {
+            const visitorObj = row.visitors || (row.visitor_id ? visitorMap.get(row.visitor_id) : undefined);
+            const hostObj = row.hosts;
+            const visit: Visit = {
+              ...row,
+              visitor_name: visitorObj?.name || row.visitor_name || '',
+              visitor_phone: visitorObj?.phone || row.visitor_phone || '',
+              visitor_photo_url: visitorObj?.photo_url || row.visitor_photo_url || '',
+              host_name: hostObj?.name || row.host_name || '',
+              host_department: hostObj?.department_or_class || row.host_department || ''
+            };
+            return visit;
           });
-          try {
-            await localDb.local_visits.bulkPut(cloudVisits);
-          } catch (e) { /* silent */ }
+
+          const cloudIds = new Set(cloudVisits.map(cv => cv.id));
+          if (!branchId && !collegeId) {
+            this.visits = cloudVisits;
+            try {
+              const pendingVisits = await localDb.local_visits.filter(v => v.sync_status === 'pending').toArray();
+              await localDb.local_visits.clear();
+              await localDb.local_visits.bulkPut([...cloudVisits, ...pendingVisits]);
+            } catch (e) { /* silent */ }
+          } else {
+            this.visits = [
+              ...this.visits.filter(v => branchId ? v.branch_id !== branchId : !cloudIds.has(v.id)),
+              ...cloudVisits
+            ].sort((a, b) => new Date(b.check_in_time).getTime() - new Date(a.check_in_time).getTime());
+
+            try {
+              if (branchId) {
+                const pendingBranchVisits = await localDb.local_visits
+                  .where('branch_id').equals(branchId)
+                  .filter(v => v.sync_status === 'pending')
+                  .toArray();
+                const oldBranchVisits = await localDb.local_visits.where('branch_id').equals(branchId).toArray();
+                await localDb.local_visits.bulkDelete(oldBranchVisits.map(v => v.id));
+                await localDb.local_visits.bulkPut([...cloudVisits, ...pendingBranchVisits]);
+              }
+            } catch (e) { /* silent */ }
+          }
         }
       } catch (e) {
         console.warn('Supabase getVisits fallback:', e);
@@ -374,11 +378,29 @@ class VisitService {
     }
 
     try {
+      const dbVisitors = await localDb.local_visitors.toArray();
+      const visitorMap = new Map(this.visitors.map(v => [v.id, v]));
+      if (dbVisitors && dbVisitors.length > 0) {
+        dbVisitors.forEach(v => visitorMap.set(v.id, v));
+        this.visitors = Array.from(visitorMap.values());
+      }
+
       const dbVisits = await localDb.local_visits.toArray();
       if (dbVisits && dbVisits.length > 0) {
         const map = new Map(this.visits.map(v => [v.id, v]));
-        dbVisits.forEach(v => {
-          map.set(v.id, { ...(map.get(v.id) || {}), ...v });
+        dbVisits.forEach(local => {
+          if ((!local.visitor_name || !local.visitor_phone) && local.visitor_id && visitorMap.has(local.visitor_id)) {
+            const matched = visitorMap.get(local.visitor_id)!;
+            local.visitor_name = local.visitor_name || matched.name;
+            local.visitor_phone = local.visitor_phone || matched.phone;
+          }
+          const cloudRow = map.get(local.id);
+          const localIsDirty = !local.synced_at || local.sync_status === 'pending';
+          if (localIsDirty) {
+            map.set(local.id, { ...(cloudRow || {}), ...local });
+          } else {
+            map.set(local.id, { ...local, ...cloudRow });
+          }
         });
         this.visits = Array.from(map.values()).sort(
           (a, b) => new Date(b.check_in_time).getTime() - new Date(a.check_in_time).getTime()
@@ -426,34 +448,6 @@ class VisitService {
     }
     await auditService.logAudit('receptionist', 'Front Desk', 'clear_visits_log', 'branch', { branch_id: branchId });
     eventBus.emit('visit:cleared', { branchId });
-  }
-
-  // ─── PRE-REGISTRATION ─────────────────────────────────────────
-
-  async getPreRegisteredVisits(branchId: string): Promise<Visit[]> {
-    return this.visits.filter(v => v.branch_id === branchId && v.is_pre_registered && v.status === 'checked_out');
-  }
-
-  async checkInPreRegisteredVisit(visitId: string): Promise<Visit> {
-    const visit = this.visits.find(v => v.id === visitId);
-    if (!visit) throw new Error("Pre-registered visit not found");
-    visit.status = 'inside';
-    visit.check_in_time = new Date().toISOString();
-    visit.qr_used = false;
-    visit.qr_expires_at = new Date(Date.now() + 12 * 3600 * 1000).toISOString();
-    await localDb.local_visits.put(visit);
-    await auditService.logAudit(visit.created_by, 'Front Desk', 'prereg_fasttrack_checkin', 'branch', { visit_id: visit.id });
-    eventBus.emit('visit:created', { visitId: visit.id, branchId: visit.branch_id });
-    return visit;
-  }
-
-  async addPreRegisteredVisit(visit: Visit): Promise<Visit> {
-    this.visits.unshift(visit);
-    try {
-      await localDb.local_visits.put(visit);
-    } catch (e) { /* silent */ }
-    eventBus.emit('visit:created', { visitId: visit.id, branchId: visit.branch_id });
-    return visit;
   }
 
   // ─── NOTIFICATION DISPATCH ───────────────────────────────────

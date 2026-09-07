@@ -11,6 +11,7 @@ import {
   ShieldAlert, Key, Lock, Unlock, Edit3, UserPlus, Download, Check, AlertCircle, X, Search,
   Camera, Upload, Image as ImageIcon, Phone, Mail, Sparkles, Loader2, Info
 } from 'lucide-react';
+import { initialsAvatar } from '../../utils/avatar';
 
 interface SuperAdminDashboardProps {
   profile: Profile;
@@ -28,13 +29,11 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ profil
   const [healthMetrics, setHealthMetrics] = useState<{
     stuckSyncCount: number;
     failedLogins24h: number;
-    activeSosCount: number;
     cloudLatencyMs: number;
     cloudStatus: 'healthy' | 'degraded' | 'offline';
   }>({
     stuckSyncCount: 0,
     failedLogins24h: 0,
-    activeSosCount: 0,
     cloudLatencyMs: 0,
     cloudStatus: 'healthy'
   });
@@ -453,9 +452,9 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ profil
         `  Role:        ${acct.role.replace('_', ' ').toUpperCase()}`,
         `  Campus:      ${acct.branchName || 'Main Campus'}`,
         `  Login ID:    ${acct.login_id}`,
-        `  Password:    ${acct.password || 'Vimtech@2026'}`,
+        `  Password:    ${acct.password || '(not set)'}`,
         `  Status:      ${acct.is_active ? 'ACTIVE' : 'SUSPENDED'}`,
-        `  Login URL:   https://localhost:3000/`,
+        `  Login URL:   ${typeof window !== 'undefined' ? window.location.origin : ''}/`,
         ``
       ].join('\n')),
       `------------------------------------------------------------`,
@@ -476,7 +475,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ profil
 
   const copyAllCollegeCredentialsText = (colName: string, accounts: Array<Profile & { password?: string; branchName?: string }>) => {
     const formatted = accounts.map(a =>
-      `• ${a.full_name} (${a.role.replace('_', ' ').toUpperCase()})\n  Login ID: ${a.login_id}\n  Password: ${a.password || 'Vimtech@2026'}\n  Campus: ${a.branchName || 'Main Campus'}`
+      `• ${a.full_name} (${a.role.replace('_', ' ').toUpperCase()})\n  Login ID: ${a.login_id}\n  Password: ${a.password || '(not set)'}\n  Campus: ${a.branchName || 'Main Campus'}`
     ).join('\n\n');
     copyToClipboard(`Credentials for ${colName}:\n\n${formatted}`, 'all_college_creds');
   };
@@ -494,7 +493,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ profil
         `  Role:        ${acct.role.replace('_', ' ').toUpperCase()}`,
         `  Campus:      ${acct.branchName || 'All Campuses'}`,
         `  Login ID:    ${acct.login_id}`,
-        `  Password:    ${acct.password || 'Vimtech@2026'}`,
+        `  Password:    ${acct.password || '(not set)'}`,
         `  Status:      ${acct.is_active ? 'ACTIVE' : 'SUSPENDED'}`,
         ``
       ].join('\n')),
@@ -910,7 +909,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ profil
                 </button>
                 <button
                   onClick={() => copyToClipboard(
-                    allAccounts.map(a => `${a.full_name} (${a.role.replace('_', ' ').toUpperCase()}) | ID: ${a.login_id} | PW: ${a.password || 'Vimtech@2026'} | College: ${a.collegeName}`).join('\n'),
+                    allAccounts.map(a => `${a.full_name} (${a.role.replace('_', ' ').toUpperCase()}) | ID: ${a.login_id} | PW: ${a.password || '(not set)'} | College: ${a.collegeName}`).join('\n'),
                     'platform_copy_all'
                   )}
                   className="px-4 py-2 bg-[#731A73] hover:bg-[#5b125b] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all"
@@ -966,7 +965,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ profil
                     <th className="py-3 px-4">User & Role</th>
                     <th className="py-3 px-4">College / Campus</th>
                     <th className="py-3 px-4">Login ID</th>
-                    <th className="py-3 px-4">Active Password</th>
+                    <th className="py-3 px-4">Password & Access</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
@@ -980,7 +979,6 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ profil
                     </tr>
                   ) : (
                     filteredAccounts.map((acct) => {
-                      const isPwShown = !!showPasswordMap[acct.id];
                       const isEditingPw = editingPasswordUserId === acct.id;
                       const isPwUpdated = passwordSuccessUserId === acct.id;
 
@@ -1028,7 +1026,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ profil
                             {isEditingPw ? (
                               <div className="flex items-center gap-1.5">
                                 <input
-                                  type="text"
+                                  type="password"
                                   placeholder="New password..."
                                   value={newPasswordInput}
                                   onChange={(e) => setNewPasswordInput(e.target.value)}
@@ -1048,23 +1046,19 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ profil
                                 </button>
                               </div>
                             ) : (
-                              <div className="flex items-center gap-1.5">
-                                <span className="bg-gray-100 text-gray-800 px-2 py-1 rounded-md text-[11px] font-bold border border-gray-200 min-w-[90px] text-center inline-block">
-                                  {isPwShown ? (acct.password || 'Vimtech@2026') : '••••••••••••'}
+                              <div className="flex items-center gap-2">
+                                <span className="bg-gray-100 text-gray-500 px-2 py-1 rounded-md text-[11px] font-bold border border-gray-200 text-center inline-block">
+                                  ••••••••••••
                                 </span>
                                 <button
-                                  onClick={() => handleTogglePasswordVisibility(acct.id)}
-                                  className="p-1 text-gray-400 hover:text-purple-800 hover:bg-purple-100 rounded transition-colors"
-                                  title={isPwShown ? 'Hide Password' : 'Show Password'}
+                                  onClick={() => {
+                                    setEditingPasswordUserId(acct.id);
+                                    setNewPasswordInput('');
+                                  }}
+                                  className="px-2 py-1 text-[10px] font-bold text-[#731A73] bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors"
+                                  title="Reset Password"
                                 >
-                                  {isPwShown ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                                </button>
-                                <button
-                                  onClick={() => copyToClipboard(acct.password || 'Vimtech@2026', `pw_${acct.id}`)}
-                                  className="p-1 text-gray-400 hover:text-purple-800 hover:bg-purple-100 rounded transition-colors"
-                                  title="Copy Password"
-                                >
-                                  {copiedField === `pw_${acct.id}` ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                                  Reset
                                 </button>
                                 {isPwUpdated && (
                                   <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5">
@@ -1087,7 +1081,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ profil
                                 <button
                                   onClick={() => {
                                     setEditingPasswordUserId(acct.id);
-                                    setNewPasswordInput(acct.password || 'Vimtech@2026');
+                                    setNewPasswordInput(''); // start empty — never prefill old/junk passwords
                                   }}
                                   className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 rounded-lg font-bold text-[10px] transition-colors"
                                 >
@@ -1535,7 +1529,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ profil
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="p-3 bg-purple-50/50 rounded-2xl border border-purple-100/80">
                 <span className="text-[10px] uppercase font-bold text-gray-500">Failed Logins (24h)</span>
                 <p className="text-xl font-extrabold font-mono text-purple-900 mt-0.5">{healthMetrics.failedLogins24h}</p>
@@ -1544,11 +1538,6 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ profil
               <div className="p-3 bg-purple-50/50 rounded-2xl border border-purple-100/80">
                 <span className="text-[10px] uppercase font-bold text-gray-500">Stuck / Pending Syncs</span>
                 <p className="text-xl font-extrabold font-mono text-purple-900 mt-0.5">{healthMetrics.stuckSyncCount}</p>
-              </div>
-
-              <div className="p-3 bg-purple-50/50 rounded-2xl border border-purple-100/80">
-                <span className="text-[10px] uppercase font-bold text-gray-500">Active SOS Dispatches</span>
-                <p className="text-xl font-extrabold font-mono text-amber-600 mt-0.5">{healthMetrics.activeSosCount}</p>
               </div>
             </div>
           </div>
@@ -1579,6 +1568,8 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ profil
               {(() => {
                 const filtered = auditLogs.filter(log => {
                   if (auditCollegeFilter === 'all') return true;
+                  // Prefer the stamped tenant columns; fall back to legacy metadata keys
+                  if (log.college_id === auditCollegeFilter) return true;
                   const meta = log.metadata || {};
                   return meta.college_id === auditCollegeFilter || meta.collegeId === auditCollegeFilter;
                 });
@@ -1713,7 +1704,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ profil
                     <div key={v.id} className="p-4 bg-purple-50/30 border border-purple-100 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
                       <div className="flex items-start gap-3.5">
                         <img
-                          src={v.visitor_photo_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=300&q=80'}
+                          src={v.visitor_photo_url || initialsAvatar(v.visitor_name)}
                           alt=""
                           className="w-12 h-12 rounded-2xl object-cover ring-2 ring-purple-200 shadow-2xs shrink-0"
                         />
@@ -1732,7 +1723,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ profil
                             </div>
                           </div>
                           <p className="text-xs text-[#731A73] font-semibold">
-                            Host: {v.host_name} • Purpose: {v.purpose}
+                            {v.host_name ? `Host: ${v.host_name} • Purpose: ${v.purpose}` : `Purpose: ${v.purpose || 'Campus Visit'}`}
                           </p>
                           {v.feedback_comment && (
                             <p className="text-xs text-gray-800 bg-white p-2 rounded-xl border border-purple-100 italic font-medium">
@@ -1887,7 +1878,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ profil
                       <input
                         type="text"
                         required
-                        placeholder="e.g. Vimtech@2026"
+                        placeholder="Set a strong initial password"
                         value={newStaffForm.password}
                         onChange={(e) => setNewStaffForm({ ...newStaffForm, password: e.target.value })}
                         className="w-full text-xs p-2.5 rounded-xl border border-gray-300 font-mono font-bold focus:ring-2 focus:ring-purple-500 focus:outline-none"
@@ -1983,7 +1974,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ profil
                                 <button
                                   onClick={() => {
                                     setEditingPasswordUserId(acct.id);
-                                    setNewPasswordInput(acct.password || 'Vimtech@2026');
+                                    setNewPasswordInput(''); // start empty — never prefill old/junk passwords
                                   }}
                                   className="text-[10px] text-[#731A73] hover:underline font-bold"
                                 >
@@ -1995,7 +1986,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ profil
                             {isEditingPw ? (
                               <div className="flex items-center gap-1.5">
                                 <input
-                                  type="text"
+                                  type="password"
                                   placeholder="Type new password..."
                                   value={newPasswordInput}
                                   onChange={(e) => setNewPasswordInput(e.target.value)}
@@ -2016,23 +2007,18 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ profil
                               </div>
                             ) : (
                               <div className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-lg border border-gray-200">
-                                <span className="font-mono font-bold text-gray-800 text-xs">
-                                  {isPwShown ? (acct.password || 'Vimtech@2026') : '••••••••••••'}
+                                <span className="font-mono font-bold text-gray-500 text-xs">
+                                  ••••••••••••
                                 </span>
                                 <div className="flex items-center gap-1">
                                   <button
-                                    onClick={() => handleTogglePasswordVisibility(acct.id)}
-                                    className="p-1 text-gray-400 hover:text-purple-800 rounded transition-colors"
-                                    title={isPwShown ? 'Hide' : 'Reveal'}
+                                    onClick={() => {
+                                      setEditingPasswordUserId(acct.id);
+                                      setNewPasswordInput('');
+                                    }}
+                                    className="px-2 py-1 text-[10px] font-bold text-[#731A73] bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors"
                                   >
-                                    {isPwShown ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                                  </button>
-                                  <button
-                                    onClick={() => copyToClipboard(acct.password || 'Vimtech@2026', `modal_pw_${acct.id}`)}
-                                    className="p-1 text-gray-400 hover:text-purple-800 rounded transition-colors"
-                                    title="Copy Password"
-                                  >
-                                    {copiedField === `modal_pw_${acct.id}` ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                                    Reset Password
                                   </button>
                                 </div>
                               </div>
@@ -2054,7 +2040,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ profil
             {/* Modal Footer */}
             <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between shrink-0">
               <span className="text-[11px] text-gray-500 font-medium">
-                Portal Login URL: <strong className="text-purple-900 font-mono">https://localhost:3000/</strong>
+                Portal Login URL: <strong className="text-purple-900 font-mono">{typeof window !== 'undefined' ? window.location.origin : ''}/</strong>
               </span>
               <button
                 onClick={() => setSelectedCollegeForCredentials(null)}
@@ -2456,7 +2442,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ profil
         </div>
       )}
 
-      {isReportModalOpen && <ReportExporter scope="platform" targetName="Vidyavahini Group Platform" visits={allVisits} branches={branches} onClose={() => setIsReportModalOpen(false)} />}
+      {isReportModalOpen && <ReportExporter scope="platform" targetName="Vidyavahini Group Platform" visits={allVisits} branches={branches} college={initialCollege} onClose={() => setIsReportModalOpen(false)} />}
     </div>
   );
 };

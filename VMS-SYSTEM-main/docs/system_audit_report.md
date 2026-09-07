@@ -1,3 +1,12 @@
+# ⛔ SUPERSEDED — HISTORICAL REFERENCE ONLY. DO NOT EXECUTE.
+
+> **This document is outdated (2026-08-06, pre-remediation) and partially WRONG today.**
+> Its instructions to create a public visitor-photos bucket and upload check-in photos
+> DIRECTLY CONTRADICT the current ephemeral-photo security policy (photos are NEVER stored).
+> It also describes a removed 5-role model, a deleted pre-registration portal and deleted files.
+> Authoritative docs: docs/progress.md · docs/deployment_guide.md · docs/api_reference.md
+
+---
 # 📌 VMS SYSTEM — COMPREHENSIVE & DETAILED REPOSITORY AUDIT REPORT
 
 ---

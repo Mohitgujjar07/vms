@@ -5,7 +5,7 @@
  */
 
 import { Profile } from '../types';
-import { supabase, isCloudReady, safeQuery } from './api/supabaseApi';
+import { supabase, isCloudReady, safeQuery, safeMutation } from './api/supabaseApi';
 import { auditService } from './auditService';
 import { eventBus } from './eventBus';
 import { INITIAL_PROFILES } from './mockData';
@@ -21,8 +21,40 @@ class AuthService {
 
   private failedAttempts: Record<string, { count: number; lockUntil: number }> = {};
 
+  private static readonly LOCKOUT_STORAGE_KEY = 'vms_failed_attempts';
+
   constructor() {
     this.loadLocalProfiles();
+    this.loadFailedAttempts();
+  }
+
+  /** Brute-force lockout survives page reloads (localStorage-backed) */
+  private loadFailedAttempts(): void {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const saved = localStorage.getItem(AuthService.LOCKOUT_STORAGE_KEY);
+        if (saved) this.failedAttempts = JSON.parse(saved);
+      }
+    } catch (e) { /* silent */ }
+  }
+
+  private persistFailedAttempts(): void {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.setItem(AuthService.LOCKOUT_STORAGE_KEY, JSON.stringify(this.failedAttempts));
+      }
+    } catch (e) { /* silent */ }
+  }
+
+  private recordFailedAttempt(cleanId: string): void {
+    const record = this.failedAttempts[cleanId] || { count: 0, lockUntil: 0 };
+    record.count += 1;
+    if (record.count >= 10) {
+      record.lockUntil = Date.now() + 30000; // 30s lock
+      record.count = 0; // reset counter after lock expires
+    }
+    this.failedAttempts[cleanId] = record;
+    this.persistFailedAttempts();
   }
 
   private loadLocalProfiles(): void {
@@ -33,26 +65,21 @@ class AuthService {
           const parsed = JSON.parse(savedProfiles) as Profile[];
           parsed.forEach(p => this.mergeProfileInMemory(p));
         }
-        const savedPw = localStorage.getItem('vms_local_passwords');
-        if (savedPw) {
-          const parsedPw = JSON.parse(savedPw);
-          this.localPasswords = { ...this.localPasswords, ...parsedPw };
-        }
+        // Security policy: Immediately purge any legacy plaintext passwords stored in localStorage
+        localStorage.removeItem('vms_local_passwords');
       }
     } catch (e) { /* silent */ }
 
-    // Guarantee default profiles & passwords are always available
+    // Guarantee default profiles & passwords are always available in memory
     INITIAL_PROFILES.forEach(p => this.mergeProfileInMemory(p));
-    if (!this.localPasswords['super.admin']) this.localPasswords['super.admin'] = 'Vimtech@2026';
-    if (!this.localPasswords['vimtech.principal']) this.localPasswords['vimtech.principal'] = 'Vimtech@2026';
-    if (!this.localPasswords['vimtech.reception1']) this.localPasswords['vimtech.reception1'] = 'Vimtech@2026';
   }
 
   private saveLocalProfiles(): void {
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
         localStorage.setItem('vms_local_profiles', JSON.stringify(this.profiles));
-        localStorage.setItem('vms_local_passwords', JSON.stringify(this.localPasswords));
+        // Ensure no plaintext passwords are ever persisted to localStorage
+        localStorage.removeItem('vms_local_passwords');
       }
     } catch (e) { /* silent */ }
   }
@@ -64,15 +91,6 @@ class AuthService {
     } else {
       this.profiles.push(profile);
     }
-  }
-
-  private recordFailedAttempt(cleanId: string): void {
-    const record = this.failedAttempts[cleanId] || { count: 0, lockUntil: 0 };
-    record.count += 1;
-    if (record.count >= 10) {
-      record.lockUntil = Date.now() + 30000; // 30s lock
-    }
-    this.failedAttempts[cleanId] = record;
   }
 
   /**
@@ -123,6 +141,7 @@ class AuthService {
             );
             if (profile) {
               delete this.failedAttempts[cleanId];
+              this.persistFailedAttempts();
               this.mergeProfile(profile, providedPw);
               this.saveLocalSession(profile);
               await auditService.logAudit(
@@ -144,14 +163,14 @@ class AuthService {
 
     if (profile) {
       const storedPw = (this.localPasswords[cleanId] || '').trim();
-      
-      // Accept matching password (or default password fallback)
-      const isMatch = !providedPw || !storedPw ||
-        storedPw.toLowerCase() === providedPw.toLowerCase() ||
-        providedPw.toLowerCase() === 'vimtech@2026';
+
+      // STRICT MATCH: exact string equality of a non-empty stored password.
+      // No master-password bypass, no empty-password acceptance.
+      const isMatch = !!providedPw && !!storedPw && storedPw === providedPw;
 
       if (isMatch) {
         delete this.failedAttempts[cleanId];
+        this.persistFailedAttempts();
         this.saveLocalSession(profile);
         await auditService.logAudit(
           profile.id, profile.full_name, 'login_success',
@@ -307,14 +326,12 @@ class AuthService {
   }
 
   /**
-   * Get currently active or default password for a login ID
+   * Get stored password for a login ID. Returns '' when unknown —
+   * never fabricate a password that was not explicitly set.
    */
-  getPasswordForUser(loginId: string, fallbackDefault?: string): string {
+  getPasswordForUser(loginId: string): string {
     const cleanId = loginId.trim().toLowerCase();
-    if (this.localPasswords[cleanId]) {
-      return this.localPasswords[cleanId];
-    }
-    return fallbackDefault || 'Vimtech@2026';
+    return this.localPasswords[cleanId] || '';
   }
 
   /**

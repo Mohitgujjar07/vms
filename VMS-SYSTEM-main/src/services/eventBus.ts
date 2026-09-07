@@ -8,8 +8,6 @@ export type VmsEventType =
   | 'visit:created'
   | 'visit:checked_out'
   | 'visit:cleared'
-  | 'sos:raised'
-  | 'sos:dismissed'
   | 'blacklist:updated'
   | 'host:added'
   | 'host:imported'

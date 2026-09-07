@@ -9,6 +9,21 @@ export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
+/**
+ * Isolated Supabase client with non-persistent auth.
+ * Used for provisioning secondary staff accounts without overwriting the logged-in administrator's active session.
+ */
+export const createIsolatedSupabaseClient = () => {
+  if (!isSupabaseConfigured) return null;
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false
+    }
+  });
+};
+
 export const isOnlineAndSupabaseReady = (): boolean => {
   return Boolean(isSupabaseConfigured && supabase && (typeof navigator === 'undefined' || navigator.onLine));
 };

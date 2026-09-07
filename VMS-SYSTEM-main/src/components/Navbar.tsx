@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Profile, College, Branch } from '../types';
 import { syncEngine } from '../offline/syncEngine';
+import { vmsService } from '../services/vmsService';
 import { VimtechLogo } from './VimtechLogo';
-import SpecularButton from './ui/SpecularButton';
 import LightBeamButton from './ui/LightBeamButton';
 import {
   User, LogOut, Wifi, WifiOff,
-  RefreshCw, ChevronDown, CheckCircle2, MapPin, Menu, X
+  RefreshCw, ChevronDown, CheckCircle2, MapPin, Menu, X, AlertTriangle
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -33,6 +33,8 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [pendingCount, setPendingCount] = useState(0);
+  const [failedCount, setFailedCount] = useState(0);
+  const [isRetrying, setIsRetrying] = useState(false);
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -43,17 +45,40 @@ export const Navbar: React.FC<NavbarProps> = ({
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    const interval = setInterval(async () => {
-      const count = await syncEngine.getPendingCount();
-      setPendingCount(count);
-    }, 2000);
+    // Refresh sync badges; also refresh immediately after each sync cycle
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const status = await syncEngine.getSyncStatus();
+        if (!cancelled) {
+          setPendingCount(status.pendingCount);
+          setFailedCount(status.failedCount);
+        }
+      } catch (e) { /* silent */ }
+    };
+    refresh();
+    const interval = setInterval(refresh, 10000);
+    const unsubData = vmsService.subscribe(refresh);
 
     return () => {
+      cancelled = true;
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       clearInterval(interval);
+      unsubData();
     };
   }, []);
+
+  /** Re-queue permanently failed sync items (tap the red badge) */
+  const handleRetryFailedSync = async () => {
+    if (failedCount === 0 || isRetrying) return;
+    setIsRetrying(true);
+    try {
+      await syncEngine.retryFailed();
+    } finally {
+      setTimeout(() => setIsRetrying(false), 1500);
+    }
+  };
 
   return (
     <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-xl border-b border-purple-100/90 shadow-sm shadow-purple-950/5">
@@ -142,6 +167,25 @@ export const Navbar: React.FC<NavbarProps> = ({
               </>
             )}
           </div>
+
+          {/* Failed-Sync Retry Badge (tap to re-queue) */}
+          {failedCount > 0 && (
+            <button
+              onClick={handleRetryFailedSync}
+              disabled={isRetrying}
+              title={`${failedCount} record(s) failed to sync. Tap to retry now.`}
+              className={`flex items-center gap-1.5 text-[11px] font-black px-2.5 py-1.5 rounded-full border transition-all shadow-xs ${
+                isRetrying
+                  ? 'bg-gray-100 text-gray-500 border-gray-200'
+                  : 'bg-red-100 text-red-700 border-red-300 hover:bg-red-200 active:scale-95'
+              }`}
+            >
+              {isRetrying
+                ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                : <AlertTriangle className="w-3.5 h-3.5" />}
+              <span>{isRetrying ? 'Retrying…' : `${failedCount} Failed`}</span>
+            </button>
+          )}
 
           {/* Profile Dropdown (Desktop) */}
           <div className="relative hidden md:block">

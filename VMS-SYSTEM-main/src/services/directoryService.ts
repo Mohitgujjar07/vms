@@ -7,7 +7,7 @@
  */
 
 import { College, Branch, Host, Profile, CollegeProvisioningResult, ProvisionedCredential } from '../types';
-import { supabase, isCloudReady, safeQuery, safeMutation } from './api/supabaseApi';
+import { supabase, isCloudReady, safeQuery, safeMutation, createIsolatedSupabaseClient } from './api/supabaseApi';
 import { localDb } from '../offline/db';
 import { auditService } from './auditService';
 import { authService } from './authService';
@@ -99,8 +99,8 @@ class DirectoryService {
     principalPassword?: string;
     receptionistPassword?: string;
   }): Promise<CollegeProvisioningResult> {
-    const collegeId = `col-${Date.now()}`;
-    const branchId = `br-${Date.now()}`;
+    const collegeId = crypto.randomUUID();
+    const branchId = crypto.randomUUID();
     const code = data.displayName.toLowerCase().replace(/[^a-z0-9]/g, '');
     const defaultPassword = `${data.displayName}@2026`;
 
@@ -147,14 +147,15 @@ class DirectoryService {
 
     const credentials: ProvisionedCredential[] = [];
     const profiles: Profile[] = [];
+    const isolatedClient = createIsolatedSupabaseClient();
 
     for (const acct of accountDefs) {
-      let profileId = crypto.randomUUID();
+      let profileId: string = crypto.randomUUID();
 
-      if (isCloudReady() && supabase) {
+      if (isolatedClient) {
         try {
           const email = `${acct.loginId.toLowerCase()}@vms.internal`;
-          const { data: signUpData } = await supabase.auth.signUp({
+          const { data: signUpData } = await isolatedClient.auth.signUp({
             email,
             password: acct.tempPw,
             options: {
@@ -429,7 +430,7 @@ class DirectoryService {
     }
 
     const branch: Branch = {
-      id: `br-${Date.now()}`,
+      id: crypto.randomUUID(),
       college_id: collegeId,
       name: bName,
       address: bAddr,
@@ -528,7 +529,7 @@ class DirectoryService {
     }
 
     const newHost: Host = {
-      id: `host-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      id: crypto.randomUUID(),
       branch_id: branchId,
       name: hName,
       type: hType,
@@ -658,13 +659,14 @@ class DirectoryService {
     branch_id?: string;
     password?: string;
   }): Promise<Profile> {
-    let profileId = crypto.randomUUID();
+    let profileId: string = crypto.randomUUID();
     const tempPw = data.password?.trim() || 'Vms@2026';
 
-    if (isCloudReady() && supabase) {
+    const isolatedClient = createIsolatedSupabaseClient();
+    if (isolatedClient) {
       try {
         const email = `${data.login_id.toLowerCase()}@vms.internal`;
-        const { data: signUpData } = await supabase.auth.signUp({
+        const { data: signUpData } = await isolatedClient.auth.signUp({
           email,
           password: tempPw,
           options: {
@@ -768,15 +770,12 @@ class DirectoryService {
    */
   async getCollegeAccountsWithCredentials(collegeId: string): Promise<Array<Profile & { password?: string; branchName?: string }>> {
     const profiles = authService.getProfiles().filter(p => p.college_id === collegeId);
-    const college = this.colleges.find(c => c.id === collegeId);
-    const defaultPw = college ? `${college.display_name}@2026` : 'Vimtech@2026';
 
     return profiles.map(p => {
       const branch = p.branch_id ? this.branches.find(b => b.id === p.branch_id) : undefined;
-      const pw = authService.getPasswordForUser(p.login_id, defaultPw);
       return {
         ...p,
-        password: pw,
+        password: authService.getPasswordForUser(p.login_id),
         branchName: branch?.name || 'All Campuses / Platform'
       };
     });
@@ -791,12 +790,10 @@ class DirectoryService {
     return profiles.map(p => {
       const college = p.college_id ? this.colleges.find(c => c.id === p.college_id) : undefined;
       const branch = p.branch_id ? this.branches.find(b => b.id === p.branch_id) : undefined;
-      const defaultPw = college ? `${college.display_name}@2026` : 'Vimtech@2026';
-      const pw = authService.getPasswordForUser(p.login_id, defaultPw);
 
       return {
         ...p,
-        password: pw,
+        password: authService.getPasswordForUser(p.login_id),
         collegeName: college?.display_name || (p.role === 'super_admin' ? 'Vidyavahini Group' : 'Unassigned'),
         branchName: branch?.name || 'All Campuses / Platform'
       };
@@ -808,6 +805,26 @@ class DirectoryService {
    */
   async adminSetUserPassword(profileId: string, newPassword: string): Promise<boolean> {
     return authService.adminSetPassword(profileId, newPassword);
+  }
+
+  /**
+   * Generate a strong temporary password and reset the account to it.
+   * Returns the new temp password so the admin UI can show it once.
+   */
+  async resetStaffPassword(profileId: string): Promise<string> {
+    const profile = authService.getProfiles().find(p => p.id === profileId);
+    if (!profile) throw new Error('Account not found');
+
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789@#$%';
+    let temp = '';
+    const bytes = new Uint8Array(12);
+    crypto.getRandomValues(bytes);
+    bytes.forEach(b => { temp += alphabet[b % alphabet.length]; });
+    // Guarantee character-class variety
+    temp = `Vm${temp}7!`;
+
+    await authService.adminSetPassword(profileId, temp);
+    return temp;
   }
 
   /**

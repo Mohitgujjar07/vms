@@ -21,8 +21,20 @@ create table if not exists colleges (
   contact_phone text,
   contact_email text,
   affiliations text[] default array[]::text[],
+  -- White-label branding & packaging
+  primary_color text default '#5B2C82',
+  secondary_color text default '#8E44AD',
+  package_id text,
+  app_build_status text default 'pending' check (app_build_status in ('pending', 'building', 'built', 'failed')),
   created_at timestamptz default now()
 );
+
+-- Migration note: branding columns added post-v1 (used by visitor passes, report
+-- headers and per-tenant APK packaging). Safe for pre-existing deployments.
+alter table colleges add column if not exists primary_color text;
+alter table colleges add column if not exists secondary_color text;
+alter table colleges add column if not exists package_id text;
+alter table colleges add column if not exists app_build_status text;
 
 -- --------------------------------------------------------------------
 -- 2. BRANCHES TABLE (Campuses)
@@ -88,7 +100,7 @@ create table if not exists visits (
   id uuid primary key default gen_random_uuid(),
   visitor_id uuid not null references visitors(id) on delete restrict,
   branch_id uuid not null references branches(id) on delete cascade,
-  host_id uuid not null references hosts(id) on delete restrict,
+  host_id uuid references hosts(id) on delete restrict,
   purpose text not null,
   category text default 'General',
   status text not null check (status in ('inside', 'checked_out')) default 'inside',
@@ -105,6 +117,10 @@ create table if not exists visits (
   synced_at timestamptz default now(),
   created_at timestamptz default now()
 );
+-- Migration note: host selection removed from check-in flow — visits may now
+-- be recorded without a host. Safe for pre-existing deployments.
+alter table visits alter column host_id drop not null;
+
 create index if not exists idx_visits_branch_status on visits(branch_id, status);
 create index if not exists idx_visits_qr_token on visits(qr_token);
 create index if not exists idx_visits_check_in_time on visits(check_in_time desc);
@@ -129,22 +145,7 @@ create index if not exists idx_blacklist_phone on blacklist(visitor_phone);
 create index if not exists idx_blacklist_branch_college on blacklist(branch_id, college_id);
 
 -- --------------------------------------------------------------------
--- 8. EMERGENCY SOS ALERTS TABLE
--- --------------------------------------------------------------------
-create table if not exists emergency_sos_alerts (
-  id uuid primary key default gen_random_uuid(),
-  branch_id uuid not null references branches(id) on delete cascade,
-  branch_name text not null,
-  receptionist_id uuid references profiles(id) on delete set null,
-  receptionist_name text not null,
-  message text not null,
-  is_active boolean not null default true,
-  created_at timestamptz default now()
-);
-create index if not exists idx_sos_branch_active on emergency_sos_alerts(branch_id, is_active);
-
--- --------------------------------------------------------------------
--- 9. AUDIT LOGS TABLE
+-- 8. AUDIT LOGS TABLE
 -- --------------------------------------------------------------------
 create table if not exists audit_logs (
   id uuid primary key default gen_random_uuid(),
@@ -152,11 +153,18 @@ create table if not exists audit_logs (
   actor_name text,
   action text not null,
   scope text not null check (scope in ('branch', 'college', 'platform')),
+  college_id uuid references colleges(id) on delete set null,
+  branch_id uuid references branches(id) on delete set null,
   metadata jsonb,
   created_at timestamptz default now()
 );
 create index if not exists idx_audit_logs_actor on audit_logs(actor_id);
 create index if not exists idx_audit_logs_created on audit_logs(created_at desc);
+create index if not exists idx_audit_logs_college_branch on audit_logs(college_id, branch_id);
+
+-- Migration note: tenant columns added for per-college audit views.
+alter table audit_logs add column if not exists college_id uuid references colleges(id) on delete set null;
+alter table audit_logs add column if not exists branch_id uuid references branches(id) on delete set null;
 
 -- ====================================================================
 -- AUTOMATIC PROFILE CREATION TRIGGER FOR SUPABASE AUTH SIGNUPS
@@ -204,114 +212,43 @@ returns profiles as $$
   select * from profiles where id = auth.uid();
 $$ language sql security definer;
 
--- COLLEGES POLICIES
-create policy "Super Admin full access on colleges" on colleges
-  for all using ((get_current_profile()).role = 'super_admin');
+-- 1. COLLEGES
+create policy "Allow all access on colleges" on colleges for all using (true) with check (true);
 
-create policy "Users view their own college" on colleges
-  for select using (id = (get_current_profile()).college_id or auth.role() = 'anon');
+-- 2. BRANCHES
+create policy "Allow all access on branches" on branches for all using (true) with check (true);
 
--- BRANCHES POLICIES
-create policy "Super Admin full access on branches" on branches
-  for all using ((get_current_profile()).role = 'super_admin');
+-- 3. PROFILES
+create policy "Allow all access on profiles" on profiles for all using (true) with check (true);
 
-create policy "Branch level users view their branch" on branches
-  for select using (id = (get_current_profile()).branch_id or auth.role() = 'anon');
+-- 4. HOSTS
+create policy "Allow all access on hosts" on hosts for all using (true) with check (true);
 
--- PROFILES POLICIES
-create policy "Super Admin manage all profiles" on profiles
-  for all using ((get_current_profile()).role = 'super_admin');
+-- 5. VISITORS
+create policy "Allow all access on visitors" on visitors for all using (true) with check (true);
 
-create policy "Branch Principal manage receptionist profiles" on profiles
-  for all using (
-    (get_current_profile()).role = 'branch_principal'
-    and branch_id = (get_current_profile()).branch_id
-    and role = 'receptionist'
-  );
+-- 6. VISITS
+create policy "Allow all access on visits" on visits for all using (true) with check (true);
 
-create policy "Users view own profile" on profiles
-  for select using (id = auth.uid());
+-- 7. BLACKLIST
+create policy "Allow all access on blacklist" on blacklist for all using (true) with check (true);
 
--- HOSTS POLICIES
-create policy "Super Admin manage hosts" on hosts
-  for all using ((get_current_profile()).role = 'super_admin');
-
-create policy "Branch Principal manage branch hosts" on hosts
-  for all using (
-    (get_current_profile()).role = 'branch_principal'
-    and branch_id = (get_current_profile()).branch_id
-  );
-
-create policy "Receptionist view branch hosts" on hosts
-  for select using (
-    (get_current_profile()).role = 'receptionist'
-    and branch_id = (get_current_profile()).branch_id
-  );
-
-create policy "Public view hosts for pre-registration" on hosts
-  for select using (true);
-
--- VISITORS POLICIES
-create policy "Authenticated users view visitors" on visitors
-  for select using (auth.role() = 'authenticated' or auth.role() = 'anon');
-
-create policy "Receptionists and public pre-registration insert visitors" on visitors
-  for insert with check (true);
-
-create policy "Receptionists and admins update visitors" on visitors
-  for update using (auth.role() = 'authenticated');
-
--- VISITS POLICIES
-create policy "Super Admin full access on visits" on visits
-  for all using ((get_current_profile()).role = 'super_admin');
-
-create policy "Branch level users view/manage branch visits" on visits
-  for all using (
-    branch_id = (get_current_profile()).branch_id
-  );
-
-create policy "Public pre-registration insert visits" on visits
-  for insert with check (true);
-
--- BLACKLIST POLICIES
-create policy "Super Admin full access on blacklist" on blacklist
-  for all using ((get_current_profile()).role = 'super_admin');
-
-create policy "Branch Principal manage branch blacklist" on blacklist
-  for all using (
-    (get_current_profile()).role = 'branch_principal'
-    and branch_id = (get_current_profile()).branch_id
-  );
-
-create policy "Receptionist view blacklist" on blacklist
-  for select using (
-    branch_id = (get_current_profile()).branch_id
-    or college_id = (get_current_profile()).college_id
-  );
-
--- EMERGENCY SOS ALERTS POLICIES
-create policy "Authenticated users full access on SOS alerts" on emergency_sos_alerts
-  for all using (auth.role() = 'authenticated');
-
--- AUDIT LOGS POLICIES
-create policy "Super Admin view all audit logs" on audit_logs
-  for select using ((get_current_profile()).role = 'super_admin');
-
-create policy "Authenticated users insert audit logs" on audit_logs
-  for insert with check (auth.role() = 'authenticated');
+-- 8. AUDIT LOGS
+create policy "Allow all access on audit_logs" on audit_logs for all using (true) with check (true);
 
 -- ====================================================================
--- STORAGE BUCKETS & RLS SETUP FOR VISITOR PHOTOS
+-- STORAGE POLICY FOR VISITOR PHOTOS
 -- ====================================================================
-insert into storage.buckets (id, name, public)
-values ('visitor-photos', 'visitor-photos', true)
-on conflict (id) do nothing;
-
-create policy "Public Read Access for Visitor Photos" on storage.objects
-  for select using (bucket_id = 'visitor-photos');
-
-create policy "Authenticated & Public Upload Access for Visitor Photos" on storage.objects
-  for insert with check (bucket_id = 'visitor-photos');
+-- PHOTO POLICY (ephemeral-by-design): visitor photos captured at check-in are
+-- NEVER uploaded or stored anywhere — they live only in app memory for the
+-- instant printable pass. No bucket is created; no storage policies needed.
+--
+-- Migration cleanup for projects created before this policy:
+--   delete from storage.objects where bucket_id = 'visitor-photos';
+--   delete from storage.buckets where id = 'visitor-photos';
+--   drop policy if exists "Public Read Access for Visitor Photos" on storage.objects;
+--   drop policy if exists "Authenticated Upload Access for Visitor Photos" on storage.objects;
+--   drop policy if exists "Authenticated & Public Upload Access for Visitor Photos" on storage.objects;
 
 -- ====================================================================
 -- REALTIME SUBSCRIPTIONS PUBLICATION
@@ -320,9 +257,6 @@ do $$
 begin
   if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'visits') then
     alter publication supabase_realtime add table visits;
-  end if;
-  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'emergency_sos_alerts') then
-    alter publication supabase_realtime add table emergency_sos_alerts;
   end if;
   if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'hosts') then
     alter publication supabase_realtime add table hosts;

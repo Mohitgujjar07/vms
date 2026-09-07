@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Host, Visitor, Visit, BlacklistEntry } from '../../types';
+import { Visitor, Visit, BlacklistEntry, College } from '../../types';
 import { vmsService } from '../../services/vmsService';
 import { VimtechLogo } from '../VimtechLogo';
 import { QRCodeSVG } from 'qrcode.react';
@@ -18,26 +18,29 @@ import {
   Upload, FlipHorizontal, Image as ImageIcon, RefreshCw, Copy, Check,
   Download, FileText, Share2, MessageCircle
 } from 'lucide-react';
+import { initialsAvatar } from '../../utils/avatar';
 
 interface CheckInModalProps {
   branchId: string;
   collegeId?: string;
   receptionistId?: string;
   receptionistName?: string;
-  hosts: Host[];
+  /** Tenant identity — drives white-label pass branding */
+  college?: College | null;
   onClose: () => void;
   onSuccess: () => void;
 }
 
 export const CheckInModal: React.FC<CheckInModalProps> = ({
   branchId, collegeId, receptionistId, receptionistName,
-  hosts, onClose, onSuccess
+  college, onClose, onSuccess
 }) => {
+  // Tenant-driven branding tokens (fallback = generic platform identity)
+  const tenantCode = (college?.display_name || 'CAMPUS').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
   const [step, setStep] = useState<'details' | 'qr'>('details');
   const [phone, setPhone] = useState('');
   const [fullName, setFullName] = useState('');
   const [photoUrl, setPhotoUrl] = useState<string>('');
-  const [selectedHostId, setSelectedHostId] = useState('');
   const [purpose, setPurpose] = useState('Admissions Enquiry for BCA / BBA / MBA');
   const [category, setCategory] = useState('Admissions');
   const [customPurpose, setCustomPurpose] = useState('');
@@ -114,6 +117,9 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Live ref to the active stream — unmount cleanup must always see the CURRENT
+  // stream, not the first-render state closure (which was null → camera stayed on).
+  const cameraStreamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
     if (phone.trim().length >= 10) handlePhoneLookup(phone.trim());
@@ -158,8 +164,10 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
   };
 
   const stopCameraStream = () => {
-    if (cameraStream) {
-      cameraStream.getTracks().forEach(t => t.stop());
+    // Always stop via the ref (current stream), then clear both ref and state
+    if (cameraStreamRef.current) {
+      cameraStreamRef.current.getTracks().forEach(t => t.stop());
+      cameraStreamRef.current = null;
       setCameraStream(null);
     }
     setIsCameraActive(false);
@@ -172,7 +180,7 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
     if (foundVisitor) {
       setIsExistingVisitor(true);
       setFullName(foundVisitor.name);
-      if (foundVisitor.photo_url) setPhotoUrl(foundVisitor.photo_url);
+      // Photo policy: never reuse stored photos — only a freshly captured one is used
     } else {
       setIsExistingVisitor(false);
     }
@@ -191,6 +199,7 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
         video: { facingMode: { ideal: mode }, width: { ideal: 640 }, height: { ideal: 480 } }
       });
       setFacingMode(mode);
+      cameraStreamRef.current = stream; // ref FIRST so unmount cleanup can always stop it
       setCameraStream(stream);
     } catch (err: any) {
       console.warn("Live WebRTC camera failed, falling back to native tablet file picker", err);
@@ -279,16 +288,15 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
       alert('Please enter a valid Visitor Full Name (letters only).');
       return;
     }
-    // Host person selection requirement removed as requested
 
     setIsSaving(true);
     try {
       const finalPurpose = purpose === 'Other' ? customPurpose : purpose;
-      const defaultPhoto = photoUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=300&q=80';
+      const defaultPhoto = photoUrl || '';
       const result = await vmsService.createCheckIn({
         branchId, collegeId, receptionistId, receptionistName,
         visitorName: fullName, visitorPhone: phone, visitorPhotoUrl: defaultPhoto,
-        hostId: selectedHostId || 'host-vimtech-001', purpose: `${category}: ${finalPurpose}`
+        purpose: `${category}: ${finalPurpose}`
       });
       const created = { ...result.visit, category };
       setCreatedVisit(created);
@@ -336,7 +344,7 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
         <div className="px-6 py-3 bg-purple-50/60 border-b border-purple-100 flex items-center justify-between text-xs font-bold">
           <span className={`flex items-center gap-2 ${step === 'details' ? 'text-[#731A73]' : 'text-emerald-700'}`}>
             <span className={`w-6 h-6 rounded-full text-xs flex items-center justify-center font-extrabold shadow-sm ${step === 'details' ? 'bg-[#731A73] text-white' : 'bg-emerald-600 text-white'}`}>1</span>
-            Visitor & Host Identity Info
+            Visitor Identity Info
           </span>
           <span className="text-purple-300 font-bold">→</span>
           <span className={`flex items-center gap-2 ${step === 'qr' ? 'text-[#731A73]' : 'text-gray-400'}`}>
@@ -561,7 +569,7 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
             <div className="text-center space-y-4 py-1 animate-fadeIn">
                 <div className={`vms-badge ${isOfflineSaved ? 'vms-badge-amber' : 'vms-badge-green'} shadow-md text-xs py-1.5 px-4 font-extrabold`}>
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  {isOfflineSaved ? 'Saved Locally (Pending Sync)' : 'VIMTECH Official Gate Pass • Verified Active Entry'}
+                  {isOfflineSaved ? 'Saved Locally (Pending Sync)' : `${college?.display_name || 'Campus'} Official Gate Pass • Verified Active Entry`}
                 </div>
 
                 {/* Executive Branded Pass Badge (Google Enterprise Standard) */}
@@ -572,20 +580,22 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
                       <span className="vms-live-pulse-dot" />
                       <span className="text-[10px] font-black uppercase tracking-widest text-amber-300">★ OFFICIAL CAMPUS GATE PASS ★</span>
                     </div>
-                    <span className="text-[9px] font-mono font-extrabold text-slate-200 bg-white/10 px-2 py-0.5 rounded-md border border-white/20">VIMTECH-SEC</span>
+                  <span className="text-[9px] font-mono font-extrabold text-slate-200 bg-white/10 px-2 py-0.5 rounded-md border border-white/20">{tenantCode}-SEC</span>
                   </div>
                   
                   {/* Official College Header Logo Banner */}
                   <div className="p-4 bg-white border-b border-purple-100 text-center relative">
                     <VimtechLogo size="sm" showSubtitle={true} className="justify-center" />
                     
-                    <div className="mt-2.5 pt-2 border-t border-purple-100 flex items-center justify-center gap-2 text-[10px] text-gray-700 font-bold">
-                      <span className="px-2.5 py-0.5 bg-amber-50 text-amber-900 rounded-full border border-amber-200 flex items-center gap-1">
-                        ★ Approved by AICTE
-                      </span>
-                      <span className="px-2.5 py-0.5 bg-purple-50 text-[#731A73] rounded-full border border-purple-200">
-                        ★ Tumkur Univ. Affiliated
-                      </span>
+                    <div className="mt-2.5 pt-2 border-t border-purple-100 flex items-center justify-center flex-wrap gap-2 text-[10px] text-gray-700 font-bold">
+                      {(college?.affiliations && college.affiliations.length > 0
+                        ? college.affiliations
+                        : ['Approved by AICTE', 'Affiliated to Tumkur University']
+                      ).slice(0, 2).map((aff: string) => (
+                        <span key={aff} className="px-2.5 py-0.5 bg-amber-50 text-amber-900 rounded-full border border-amber-200">
+                          ★ {aff}
+                        </span>
+                      ))}
                     </div>
                   </div>
 
@@ -595,7 +605,7 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
                     <div className="flex items-center gap-3.5 bg-white p-3.5 rounded-2xl border border-purple-200 shadow-sm relative overflow-hidden">
                       <div className="relative shrink-0">
                         <img
-                          src={createdVisit.visitor_photo_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=300&q=80'}
+                          src={createdVisit.visitor_photo_url || initialsAvatar(createdVisit.visitor_name)}
                           alt={createdVisit.visitor_name}
                           className="w-16 h-16 rounded-2xl object-cover ring-2 ring-[#731A73] ring-offset-2 shadow-sm"
                         />
@@ -654,7 +664,7 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
                         </strong>
                       </div>
                       <div className="col-span-2 pt-2 border-t border-purple-200/80 flex items-center justify-between text-[11px]">
-                        <span className="text-gray-600 font-bold">Campus: <strong className="text-gray-900">Main Campus (Tumkur)</strong></span>
+                        <span className="text-gray-600 font-bold">{createdVisit.host_name ? <>Host: <strong className="text-gray-900">{createdVisit.host_name}</strong></> : <><strong className="text-gray-900">General Visit</strong></>}</span>
                         <span className="text-[#731A73] font-extrabold">Valid Today Only</span>
                       </div>
                     </div>
@@ -663,7 +673,7 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
                   {/* Bottom Security Seal Bar */}
                   <div className="bg-slate-950 py-2.5 px-4 text-center text-[9px] font-black font-mono text-amber-400 uppercase tracking-widest border-t border-slate-800 flex items-center justify-between shadow-inner">
                     <span>AUTHENTIC CAMPUS GATE PASS</span>
-                    <span className="text-slate-400">VIDYAVAHINI GROUP (VIMTECH-VMS)</span>
+                    <span className="text-slate-400">VIDYAVAHINI GROUP ({tenantCode}-VMS)</span>
                   </div>
                 </div>
 
@@ -695,15 +705,17 @@ export const CheckInModal: React.FC<CheckInModalProps> = ({
                     <span>Send Pass to Visitor (WhatsApp)</span>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => handleOpenWhatsAppChat(createdVisit, 'host')}
-                    title="Direct WhatsApp Arrival Alert to Visiting Host"
-                    className="py-3 px-4 bg-purple-800 hover:bg-purple-900 text-white rounded-2xl text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-purple-950/20 active:scale-95 transition-all"
-                  >
-                    <Share2 className="w-4.5 h-4.5 text-amber-300" />
-                    <span>Alert Host (WhatsApp)</span>
-                  </button>
+                  {createdVisit.host_name && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenWhatsAppChat(createdVisit, 'host')}
+                      title="Direct WhatsApp Arrival Alert to Visiting Host"
+                      className="py-3 px-4 bg-purple-800 hover:bg-purple-900 text-white rounded-2xl text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-purple-950/20 active:scale-95 transition-all"
+                    >
+                      <Share2 className="w-4.5 h-4.5 text-amber-300" />
+                      <span>Alert Host (WhatsApp)</span>
+                    </button>
+                  )}
                 </div>
 
                 {/* Secondary Quick Action Tools: Copy & Downloads */}

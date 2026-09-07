@@ -264,10 +264,13 @@ export const generatePassCanvas = async (visit: Visit): Promise<HTMLCanvasElemen
   const displayPurpose = `Purpose: ${visit.purpose || 'Campus Visit'}`.slice(0, 48);
   ctx.fillText(displayPurpose, detailsX, infoY + 128);
 
-  const displayHost = `Host: ${visit.host_name || 'Faculty Host'}`.slice(0, 40);
+  // Host is optional (selection removed from check-in) — omit the line entirely when absent
+  const displayHost = visit.host_name ? `Host: ${visit.host_name}`.slice(0, 40) : '';
   ctx.fillStyle = '#475569';
   ctx.font = 'bold 12px sans-serif';
-  ctx.fillText(displayHost, detailsX, infoY + 148);
+  if (displayHost) {
+    ctx.fillText(displayHost, detailsX, infoY + 148);
+  }
 
   // 6. QR Code Section Container
   const qrSectionY = infoY + 176;
@@ -418,9 +421,11 @@ export const buildWhatsAppPassMessage = (
 
   const visitorName = visit.visitor_name || 'Valued Visitor';
   const visitorPhone = visit.visitor_phone || 'N/A';
-  const hostName = visit.host_name || 'Faculty / Staff Host';
+  const hostName = visit.host_name || '';
   const purpose = visit.purpose || 'Official Campus Visit';
   const qrToken = visit.qr_token || 'N/A';
+  // Host is optional — the line disappears from messages when no host was recorded
+  const hostLine = (label: string) => (hostName ? `▸ *${label}*: *${hostName}*\n` : '');
 
   if (target === 'host') {
     return (
@@ -458,8 +463,7 @@ Your express campus pass has been pre-approved for your upcoming visit:
 📋 *PASS DETAILS*
 ▸ *Visitor Name*: ${visitorName}
 ▸ *Mobile No*: \`${visitorPhone}\`
-▸ *Visiting Host*: *${hostName}*
-▸ *Purpose of Visit*: ${purpose}
+${hostLine('Visiting Host')}▸ *Purpose of Visit*: ${purpose}
 ▸ *Expected Arrival*: ${checkInFormatted}
 ▸ *Campus Location*: Main Campus, Tumkur
 
@@ -488,8 +492,7 @@ Welcome to VIMTECH Campus. Your official digital entry pass has been issued by t
 📋 *VISITOR PASS SUMMARY*
 ▸ *Visitor Name*: ${visitorName}
 ▸ *Mobile No*: \`${visitorPhone}\`
-▸ *Visiting Host*: *${hostName}*
-▸ *Purpose of Visit*: ${purpose}
+${hostLine('Visiting Host')}▸ *Purpose of Visit*: ${purpose}
 ▸ *Check-in Time*: ${checkInFormatted}
 ▸ *Campus Location*: Main Campus, Tumkur
 

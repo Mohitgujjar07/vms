@@ -65,7 +65,7 @@ insert into visits (id, visitor_id, branch_id, host_id, purpose, status, qr_toke
     '33333331-3333-3333-3333-333333333333',
     'Admissions Enquiry: Admissions Enquiry for BCA (AI & ML)',
     'inside',
-    'VMS-VIMTECH-8923-TOKEN',
+    'VMS-VIMTECH-8923-9481',
     now() + interval '12 hours',
     false,
     now() - interval '45 minutes',
@@ -79,7 +79,7 @@ insert into visits (id, visitor_id, branch_id, host_id, purpose, status, qr_toke
     '33333333-3333-3333-3333-333333333333',
     'Parent Visit: Meeting with BCA HOD',
     'checked_out',
-    'VMS-VIMTECH-7412-TOKEN',
+    'VMS-VIMTECH-7412-2205',
     now() - interval '1 hour',
     true,
     now() - interval '3 hours',
@@ -92,3 +92,73 @@ on conflict (id) do nothing;
 insert into blacklist (id, scope, branch_id, college_id, visitor_phone, reason) values
   ('66666661-6666-6666-6666-666666666666', 'branch', '22222222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', '+919000000000', 'Unauthorized commercial solicitation and disturbance near library campus area')
 on conflict (id) do nothing;
+
+-- ====================================================================
+-- 7. SEED AUTH USERS + PROFILES (out-of-the-box logins)
+-- Synthetic email mapping: {login_id}@vms.internal
+-- Default password for all three seeded accounts: Vimtech@2026
+-- (bcrypt-hashed; CHANGE THESE IMMEDIATELY IN PRODUCTION via the app)
+-- ====================================================================
+do $$
+declare
+  super_uid   uuid := '77777777-7777-7777-7777-777777777777';
+  principal_uid uuid := '99999999-9999-9999-9999-999999999999';
+  reception_uid uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  pw_hash text := crypt('Vimtech@2026', gen_salt('bf'));
+begin
+  -- Super Admin (platform-wide)
+  insert into auth.users (instance_id, id, aud, role, email, encrypted_password,
+    email_confirmed_at, created_at, updated_at,
+    raw_app_meta_data, raw_user_meta_data, confirmation_token, recovery_token)
+  values ('00000000-0000-0000-0000-000000000000', super_uid, 'authenticated', 'authenticated',
+    'super.admin@vms.internal', pw_hash,
+    now(), now(), now(),
+    '{"provider":"email","providers":["email"]}',
+    '{"login_id":"super.admin","full_name":"Platform Controller (Vidyavahini Group)","role":"super_admin"}',
+    '', '')
+  on conflict (id) do nothing;
+
+  -- Branch Principal (VIMTECH Main Campus)
+  insert into auth.users (instance_id, id, aud, role, email, encrypted_password,
+    email_confirmed_at, created_at, updated_at,
+    raw_app_meta_data, raw_user_meta_data, confirmation_token, recovery_token)
+  values ('00000000-0000-0000-0000-000000000000', principal_uid, 'authenticated', 'authenticated',
+    'vimtech.principal@vms.internal', pw_hash,
+    now(), now(), now(),
+    '{"provider":"email","providers":["email"]}',
+    '{"login_id":"vimtech.principal","full_name":"VIMTECH Branch Principal","role":"branch_principal"}',
+    '', '')
+  on conflict (id) do nothing;
+
+  -- Receptionist (VIMTECH Main Campus front desk)
+  insert into auth.users (instance_id, id, aud, role, email, encrypted_password,
+    email_confirmed_at, created_at, updated_at,
+    raw_app_meta_data, raw_user_meta_data, confirmation_token, recovery_token)
+  values ('00000000-0000-0000-0000-000000000000', reception_uid, 'authenticated', 'authenticated',
+    'vimtech.reception1@vms.internal', pw_hash,
+    now(), now(), now(),
+    '{"provider":"email","providers":["email"]}',
+    '{"login_id":"vimtech.reception1","full_name":"VIMTECH Front Desk Receptionist","role":"receptionist"}',
+    '', '')
+  on conflict (id) do nothing;
+
+  -- Matching profiles (RLS-scoped accounts). handle_new_user trigger may have
+  -- already inserted these on auth signup — upsert keeps our tenant scoping.
+  insert into profiles (id, login_id, full_name, role, college_id, branch_id, is_active, must_change_password)
+  values
+    (super_uid, 'super.admin', 'Platform Controller (Vidyavahini Group)', 'super_admin',
+     null, null, true, false),
+    (principal_uid, 'vimtech.principal', 'VIMTECH Branch Principal', 'branch_principal',
+     '11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', true, false),
+    (reception_uid, 'vimtech.reception1', 'VIMTECH Front Desk Receptionist', 'receptionist',
+     '11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', true, false)
+  on conflict (id) do update set
+    login_id = excluded.login_id,
+    role = excluded.role,
+    college_id = excluded.college_id,
+    branch_id = excluded.branch_id,
+    is_active = true;
+exception
+  when others then
+    raise notice 'Auth user seeding notice: % (run scripts/provision-auth-users.ts as fallback)', SQLERRM;
+end $$;

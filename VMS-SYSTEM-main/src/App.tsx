@@ -7,14 +7,24 @@ import { VimtechLogo } from './components/VimtechLogo';
 import { ReceptionDashboard } from './components/reception/ReceptionDashboard';
 import { PrincipalDashboard } from './components/principal/PrincipalDashboard';
 import { SuperAdminDashboard } from './components/superadmin/SuperAdminDashboard';
-import { SosModal } from './components/sos/SosModal';
 import { SecurityHelpModal } from './components/common/SecurityHelpModal';
 import DotField from './components/ui/DotField';
 import LightBeamButton from './components/ui/LightBeamButton';
 import { User, KeyRound, ArrowRight, Eye, EyeOff, Phone } from 'lucide-react';
 import { INITIAL_COLLEGES, INITIAL_BRANCHES } from './services/mockData';
-import { purgeLegacyMockCache } from './offline/purgeCache';
+import { purgeLegacyMockCache, purgeLocalTenantCache } from './offline/purgeCache';
 import { telemetry } from './services/telemetryService';
+
+/** Remember which college's data is cached locally (shared-device isolation) */
+const readCachedCollegeId = (): string | null => {
+  try { return localStorage.getItem('vms_cached_college_id'); } catch { return null; }
+};
+const writeCachedCollegeId = (collegeId: string | null): void => {
+  try {
+    if (collegeId) localStorage.setItem('vms_cached_college_id', collegeId);
+    else localStorage.removeItem('vms_cached_college_id');
+  } catch { /* silent */ }
+};
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: any }> {
   constructor(props: { children: React.ReactNode }) {
@@ -82,17 +92,8 @@ export const App: React.FC = () => {
     try {
       await purgeLegacyMockCache();
 
-      // 1. Try restoring session from local storage or Supabase auth
-      let restoredProfile: Profile | null = await authService.restoreLocalSession();
-
-      if (!restoredProfile) {
-        const savedSession = localStorage.getItem('vms_active_session');
-        if (savedSession) {
-          try {
-            restoredProfile = JSON.parse(savedSession);
-          } catch (e) {}
-        }
-      }
+      // 1. Try restoring session from Supabase auth / local profile storage
+      const restoredProfile: Profile | null = await authService.restoreLocalSession();
 
       if (restoredProfile) {
         setCurrentProfile(restoredProfile);
@@ -141,8 +142,17 @@ export const App: React.FC = () => {
       }
       const profile = await vmsService.login(loginIdInput, passwordInput);
       if (profile) {
+        // Shared-device isolation: if this account belongs to a different college
+        // than the locally cached one, wipe cached visits/visitors/hosts/blacklist.
+        const cachedCollegeId = readCachedCollegeId();
+        const loginCollegeId = profile.college_id || null;
+        if (cachedCollegeId && loginCollegeId && cachedCollegeId !== loginCollegeId) {
+          await purgeLocalTenantCache();
+        }
+        writeCachedCollegeId(loginCollegeId);
+
         setCurrentProfile(profile);
-        localStorage.setItem('vms_active_session', JSON.stringify(profile));
+        authService.saveLocalSession(profile); // single source of truth for sessions
         const colId = profile.college_id || '';
         const brId = profile.branch_id || '';
         setActiveCollegeId(colId);
@@ -159,6 +169,7 @@ export const App: React.FC = () => {
   };
 
   const handleLogout = async () => {
+    // authService.logout clears vms_active_profile; also purge the legacy duplicate key
     localStorage.removeItem('vms_active_session');
     await vmsService.logout();
     setCurrentProfile(null);
@@ -181,7 +192,6 @@ export const App: React.FC = () => {
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-[#f8fafc] text-gray-800 flex flex-col font-sans">
-        <SosModal branchId={activeBranch?.id} />
         {currentProfile ? (
           <>
             <Navbar

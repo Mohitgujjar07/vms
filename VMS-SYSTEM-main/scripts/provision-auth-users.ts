@@ -1,18 +1,34 @@
 /**
  * Provision Auth Users Script for Supabase VMS
- * Creates initial 4 auth users in Supabase Auth via Service Role API.
- * Uses synthetic email mapping ({loginId}@vimtech.in) for username-only login.
- * 
- * Usage:
- *   npx ts-node scripts/provision-auth-users.ts
+ * Creates the initial 3 auth users in Supabase Auth via Service Role API.
+ * Uses the canonical synthetic email mapping ({loginId}@vms.internal) — MUST
+ * match supabase/seed.sql and directoryService.ts or logins will diverge.
+ *
+ * Zero-dependency (no dotenv/ts-node required):
+ *   node --experimental-strip-types scripts/provision-auth-users.ts   (Node 22+)
+ * or compile-free via:  npx tsx scripts/provision-auth-users.ts
+ *
+ * Requires VITE_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY in .env.
  */
 
 import { createClient } from '@supabase/supabase-js';
-import * as dotenv from 'dotenv';
+import * as fs from 'fs';
 import * as path from 'path';
 
-// Load .env file
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+// Minimal .env loader (avoids adding dotenv as a dependency)
+function loadEnvFile(filePath: string): void {
+  if (!fs.existsSync(filePath)) return;
+  for (const line of fs.readFileSync(filePath, 'utf-8').split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+      const idx = trimmed.indexOf('=');
+      process.env[trimmed.slice(0, idx).trim()] = trimmed.slice(idx + 1).trim();
+    }
+  }
+}
+
+loadEnvFile(path.resolve(process.cwd(), '.env'));
+loadEnvFile(path.resolve(process.cwd(), '.env.development'));
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
 const serviceRoleKey = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -66,7 +82,7 @@ async function provisionUsers() {
   console.log('🚀 Provisioning VMS initial auth users on Supabase...');
 
   for (const u of USERS_TO_PROVISION) {
-    const email = `${u.loginId}@vimtech.in`;
+    const email = `${u.loginId}@vms.internal`; // canonical domain — matches seed.sql + app
     console.log(`\nProcessing: ${u.loginId} (${email})...`);
 
     // Check if user already exists
@@ -111,7 +127,7 @@ async function provisionUsers() {
           college_id: u.collegeId || null,
           branch_id: u.branchId || null,
           is_active: true,
-          must_change_password: true
+          must_change_password: false // aligned with seed.sql defaults
         });
 
       if (profileErr) {

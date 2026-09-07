@@ -18,10 +18,12 @@ android {
     }
     signingConfigs {
         release {
-            storeFile file("vimtech-release-key.jks")
-            storePassword "Vimtech@2026"
-            keyAlias "vimtech"
-            keyPassword "Vimtech@2026"
+            // Credentials injected via environment variables or ~/.gradle/gradle.properties.
+            // Never commit real keystore passwords to source control.
+            storeFile file(System.getenv("VMS_KEYSTORE_FILE") || project.findProperty("VMS_KEYSTORE_FILE") || "vimtech-release-key.jks")
+            storePassword System.getenv("VMS_KEYSTORE_PASSWORD") || project.findProperty("VMS_KEYSTORE_PASSWORD") || ""
+            keyAlias System.getenv("VMS_KEY_ALIAS") || project.findProperty("VMS_KEY_ALIAS") || "vidyavahini"
+            keyPassword System.getenv("VMS_KEY_PASSWORD") || project.findProperty("VMS_KEY_PASSWORD") || ""
         }
     }
     buildTypes {

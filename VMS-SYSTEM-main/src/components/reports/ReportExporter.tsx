@@ -1,8 +1,5 @@
 import React, { useState } from 'react';
-import { Visit, Branch } from '../../types';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
+import { Visit, Branch, College } from '../../types';
 import { X, FileText, FileSpreadsheet } from 'lucide-react';
 
 interface ReportExporterProps {
@@ -10,14 +7,25 @@ interface ReportExporterProps {
   targetName: string;
   visits: Visit[];
   branches?: Branch[];
+  /** Tenant identity drives the letterhead — falls back to platform branding */
+  college?: College | null;
   onClose: () => void;
 }
 
-export const ReportExporter: React.FC<ReportExporterProps> = ({ scope, targetName, visits, branches, onClose }) => {
+export const ReportExporter: React.FC<ReportExporterProps> = ({ scope, targetName, visits, branches, college, onClose }) => {
   const [filterType, setFilterType] = useState<'all' | 'daily' | 'monthly' | 'yearly' | 'custom_range'>('all');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [startDate, setStartDate] = useState(new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // Letterhead identity — tenant-driven with graceful platform fallback
+  const orgGroup = 'VIDYAVAHINI GROUP';
+  const orgName = (college?.name || 'Vidyavahini Group Platform').toUpperCase();
+  const orgAddress = college?.address || 'Centralised Multi-Tenant Visitor Management Platform';
+  const orgAffiliations = college?.affiliations?.length
+    ? college.affiliations.join(' • ')
+    : 'Approved by AICTE • Affiliated to Tumkur University • Recognized by Govt. of Karnataka';
+  const filePrefix = (college?.display_name || 'VMS').replace(/[^A-Za-z0-9]/g, '');
 
   const filteredVisits = visits.filter(v => {
     if (filterType === 'all') return true;
@@ -46,15 +54,20 @@ export const ReportExporter: React.FC<ReportExporterProps> = ({ scope, targetNam
     return h > 0 ? `${h}h ${m}m` : `${m}m`;
   };
 
-  const exportPDF = () => {
+  const exportPDF = async () => {
+    // Lazy-load the PDF engine (~500 kB) only when actually exporting
+    const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+      import('jspdf'),
+      import('jspdf-autotable')
+    ]);
     const doc = new jsPDF();
     doc.setFontSize(9); doc.setTextColor(128, 0, 128); doc.setFont('helvetica', 'bold');
-    doc.text('VIDYAVAHINI GROUP', 14, 15);
+    doc.text(orgGroup, 14, 15);
     doc.setFontSize(15); doc.setTextColor(74, 18, 74);
-    doc.text('VAISIRI INSTITUTE OF MANAGEMENT & TECHNOLOGY', 14, 22);
+    doc.text(orgName, 14, 22);
     doc.setFontSize(9); doc.setTextColor(100, 110, 120); doc.setFont('helvetica', 'normal');
-    doc.text('2nd Stage, Sri Sharadadevi Nagar, Sai Baba Temple Road, Tumkur – 572103', 14, 28);
-    doc.text('Approved by AICTE • Affiliated to Tumkur University • Recognized by Govt. of Karnataka', 14, 33);
+    doc.text(orgAddress, 14, 28);
+    doc.text(orgAffiliations, 14, 33);
     doc.setDrawColor(128, 0, 128); doc.setLineWidth(0.8); doc.line(14, 36, 196, 36);
     doc.setFontSize(11); doc.setTextColor(30, 40, 50); doc.setFont('helvetica', 'bold');
     doc.text(`Official Visitor Log Report — ${targetName}`, 14, 44);
@@ -64,29 +77,33 @@ export const ReportExporter: React.FC<ReportExporterProps> = ({ scope, targetNam
 
     autoTable(doc, {
       startY: 60,
-      head: [['#', 'Visitor', 'Phone', 'Purpose', 'Host', 'Check-In', 'Check-Out', 'Duration', 'Rating', 'Feedback Comment']],
+      head: [['#', 'Visitor Name', 'Phone Number', 'Purpose', 'Check-In', 'Check-Out', 'Duration', 'Rating', 'Feedback Comment']],
       body: filteredVisits.map((v, i) => [
         i + 1,
         v.visitor_name || 'Visitor',
-        v.visitor_phone || '',
+        v.visitor_phone ? (v.visitor_phone.startsWith('+') ? v.visitor_phone : `+91 ${v.visitor_phone}`) : '-',
         v.purpose || 'Visit',
-        v.host_name || 'Host',
-        new Date(v.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        v.check_out_time ? new Date(v.check_out_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-',
+        new Date(v.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }),
+        v.check_out_time ? new Date(v.check_out_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : '-',
         calculateDuration(v.check_in_time, v.check_out_time),
         v.rating ? `${v.rating} Stars` : '-',
         v.feedback_comment || '-'
       ]),
       theme: 'grid',
       headStyles: { fillColor: [74, 18, 74], fontSize: 8, fontStyle: 'bold' },
-      styles: { fontSize: 7, cellPadding: 2 }
+      styles: { fontSize: 7, cellPadding: 2.5 },
+      columnStyles: {
+        0: { cellWidth: 8, halign: 'center' },
+        1: { fontStyle: 'bold' },
+        2: { font: 'courier' }
+      }
     });
 
     const finalY = (doc as any).lastAutoTable.finalY || 150;
     doc.setFontSize(9); doc.setTextColor(80, 90, 100);
     doc.text('Prepared by VMS Front Desk System', 14, finalY + 20);
     doc.text('Principal Signature: _______________________', 105, finalY + 20);
-    doc.save(`VIMTECH_Report_${targetName.replace(/\s+/g, '_')}_${Date.now()}.pdf`);
+    doc.save(`${filePrefix}_Report_${targetName.replace(/[^A-Za-z0-9]/g, '_')}_${Date.now()}.pdf`);
   };
 
   const sanitizeCell = (val: any): string => {
@@ -98,16 +115,16 @@ export const ReportExporter: React.FC<ReportExporterProps> = ({ scope, targetNam
     return str;
   };
 
-  const exportExcel = () => {
+  const exportExcel = async () => {
+    // Lazy-load the XLSX engine only when actually exporting
+    const XLSX = await import('xlsx');
     const data = filteredVisits.map((v, i) => ({
       'Sl No': i + 1,
-      'College': 'VIMTECH',
+      'College': college?.display_name || college?.name || 'Platform',
       'Branch': sanitizeCell(targetName),
-      'Visitor': sanitizeCell(v.visitor_name),
-      'Phone': sanitizeCell(v.visitor_phone),
-      'Purpose': sanitizeCell(v.purpose),
-      'Host': sanitizeCell(v.host_name),
-      'Department': sanitizeCell(v.host_department),
+      'Visitor Name': sanitizeCell(v.visitor_name || 'Visitor'),
+      'Phone Number': sanitizeCell(v.visitor_phone ? (v.visitor_phone.startsWith('+') ? v.visitor_phone : `+91 ${v.visitor_phone}`) : 'N/A'),
+      'Purpose': sanitizeCell(v.purpose || 'Visit'),
       'Status': sanitizeCell(v.status),
       'Check-In': new Date(v.check_in_time).toLocaleString(),
       'Check-Out': v.check_out_time ? new Date(v.check_out_time).toLocaleString() : 'N/A',
@@ -118,8 +135,8 @@ export const ReportExporter: React.FC<ReportExporterProps> = ({ scope, targetNam
     }));
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'VIMTECH Log');
-    XLSX.writeFile(wb, `VIMTECH_Export_${Date.now()}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, `${filePrefix} Log`);
+    XLSX.writeFile(wb, `${filePrefix}_Export_${Date.now()}.xlsx`);
   };
 
   return (
@@ -161,8 +178,8 @@ export const ReportExporter: React.FC<ReportExporterProps> = ({ scope, targetNam
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3 pt-2">
-          <button onClick={exportPDF} className="vms-btn-primary text-xs flex items-center justify-center gap-2"><FileText className="w-4 h-4" /> PDF Report</button>
-          <button onClick={exportExcel} className="vms-btn-secondary text-xs flex items-center justify-center gap-2 !bg-green-50 !text-green-700 !border-green-200"><FileSpreadsheet className="w-4 h-4" /> Excel Export</button>
+          <button onClick={() => exportPDF()} className="vms-btn-primary text-xs flex items-center justify-center gap-2"><FileText className="w-4 h-4" /> PDF Report</button>
+          <button onClick={() => exportExcel()} className="vms-btn-secondary text-xs flex items-center justify-center gap-2 !bg-green-50 !text-green-700 !border-green-200"><FileSpreadsheet className="w-4 h-4" /> Excel Export</button>
         </div>
       </div>
     </div>

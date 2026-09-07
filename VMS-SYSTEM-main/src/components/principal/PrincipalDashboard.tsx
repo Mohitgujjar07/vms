@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Profile, Branch, Visit, Host, BlacklistEntry, EmergencySosAlert, College } from '../../types';
+import { Profile, Branch, Visit, Host, BlacklistEntry, College } from '../../types';
 import { vmsService } from '../../services/vmsService';
 import { ReportExporter } from '../reports/ReportExporter';
 import { VimtechLogo } from '../VimtechLogo';
 import {
   Users, UserCheck, ShieldAlert, BarChart3, Clock, Plus,
   FileText, Download, Upload, Filter, UserPlus, Trash2, AlertOctagon, CheckCircle2,
-  Star, MessageSquare, ThumbsUp
+  Star, MessageSquare, ThumbsUp, Key, Lock, Eye, EyeOff, Check, X, Copy
 } from 'lucide-react';
+import { initialsAvatar } from '../../utils/avatar';
 
 interface PrincipalDashboardProps {
   profile: Profile;
@@ -20,7 +21,6 @@ export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ profile,
   const [hosts, setHosts] = useState<Host[]>([]);
   const [blacklist, setBlacklist] = useState<BlacklistEntry[]>([]);
   const [staff, setStaff] = useState<Profile[]>([]);
-  const [activeSosAlerts, setActiveSosAlerts] = useState<EmergencySosAlert[]>([]);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   // Directory filter & host add form
@@ -38,6 +38,16 @@ export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ profile,
   const [isAddingStaff, setIsAddingStaff] = useState(false);
   const [newStaffLoginId, setNewStaffLoginId] = useState('');
   const [newStaffFullName, setNewStaffFullName] = useState('');
+  const [newStaffPassword, setNewStaffPassword] = useState('');
+  const [showNewStaffPassword, setShowNewStaffPassword] = useState(false);
+  const [staffStatusMessage, setStaffStatusMessage] = useState<string | null>(null);
+
+  // Edit / Update Staff Password State
+  const [editingPasswordStaffId, setEditingPasswordStaffId] = useState<string | null>(null);
+  const [updatePasswordInput, setUpdatePasswordInput] = useState('');
+  const [showUpdatePassword, setShowUpdatePassword] = useState(false);
+  const [passwordSuccessStaffId, setPasswordSuccessStaffId] = useState<string | null>(null);
+  const [copiedLoginId, setCopiedLoginId] = useState<string | null>(null);
 
   // Add Blacklist State
   const [isAddingBlacklist, setIsAddingBlacklist] = useState(false);
@@ -61,7 +71,6 @@ export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ profile,
     setHosts(await vmsService.getHosts(branch.id));
     setBlacklist(await vmsService.getBlacklist(branch.id));
     setStaff(await vmsService.getBranchStaff(branch.id));
-    setActiveSosAlerts(await vmsService.getActiveSosAlerts(branch.id));
     if (branch.college_id) {
       const col = await vmsService.getCollegeById(branch.college_id);
       if (col) setCollege(col);
@@ -127,20 +136,60 @@ export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ profile,
     reader.readAsText(csvFile);
   };
 
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedLoginId(id);
+    setTimeout(() => setCopiedLoginId(null), 2000);
+  };
+
   const handleCreateStaff = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newStaffLoginId || !newStaffFullName) return;
-    await vmsService.createStaffAccount({
-      login_id: newStaffLoginId,
-      full_name: newStaffFullName,
-      role: 'receptionist',
-      college_id: branch.college_id,
-      branch_id: branch.id
-    });
-    setNewStaffLoginId('');
-    setNewStaffFullName('');
-    setIsAddingStaff(false);
-    loadData();
+    if (!newStaffLoginId.trim() || !newStaffFullName.trim()) return;
+    try {
+      const customPw = newStaffPassword.trim() || 'Vms@2026';
+      await vmsService.createStaffAccount({
+        login_id: newStaffLoginId.trim(),
+        full_name: newStaffFullName.trim(),
+        role: 'receptionist',
+        college_id: branch.college_id,
+        branch_id: branch.id,
+        password: customPw
+      });
+      setStaffStatusMessage(`Staff account "${newStaffFullName}" created successfully with custom password "${customPw}"!`);
+      setTimeout(() => setStaffStatusMessage(null), 6000);
+      setNewStaffLoginId('');
+      setNewStaffFullName('');
+      setNewStaffPassword('');
+      setIsAddingStaff(false);
+      loadData();
+    } catch (err: any) {
+      alert(`Failed to create staff account: ${err?.message || 'Unknown error'}`);
+    }
+  };
+
+  const handleUpdateStaffPassword = async (staffId: string, staffName: string) => {
+    if (!updatePasswordInput.trim()) {
+      alert('Please enter a valid new password.');
+      return;
+    }
+    try {
+      const success = await vmsService.adminSetUserPassword(staffId, updatePasswordInput.trim());
+      if (success) {
+        setPasswordSuccessStaffId(staffId);
+        setStaffStatusMessage(`Password updated & saved successfully for ${staffName}!`);
+        setTimeout(() => {
+          setPasswordSuccessStaffId(null);
+          setStaffStatusMessage(null);
+        }, 3500);
+        setEditingPasswordStaffId(null);
+        setUpdatePasswordInput('');
+        loadData();
+      } else {
+        alert('Failed to update password.');
+      }
+    } catch (err: any) {
+      alert(`Failed to update password: ${err?.message || 'Unknown error'}`);
+    }
   };
 
   const handleAddBlacklist = async (e: React.FormEvent) => {
@@ -169,41 +218,6 @@ export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ profile,
 
   return (
     <div className="space-y-6 pb-12 animate-fadeIn">
-      {/* Active Emergency SOS Alert Banner */}
-      {activeSosAlerts.length > 0 && (
-        <div className="p-5 bg-gradient-to-r from-red-600 via-red-700 to-red-600 text-white rounded-2xl shadow-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-2 border-red-300 animate-pulse">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-white text-red-600 flex items-center justify-center shrink-0 shadow-lg animate-bounce">
-              <AlertOctagon className="w-7 h-7" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="px-2.5 py-0.5 bg-amber-300 text-red-950 font-black text-[10px] uppercase rounded-full tracking-wider">
-                  CRITICAL EMERGENCY SOS
-                </span>
-                <span className="text-[10px] text-white/80 font-mono">
-                  {new Date(activeSosAlerts[0].created_at).toLocaleTimeString()}
-                </span>
-              </div>
-              <h4 className="font-heading font-black text-lg text-white mt-0.5">
-                Front Desk Call from {activeSosAlerts[0].receptionist_name}
-              </h4>
-              <p className="text-xs text-red-100 mt-0.5 font-medium">
-                "{activeSosAlerts[0].message}"
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={async () => {
-              await vmsService.dismissSosAlert(activeSosAlerts[0].id);
-              loadData();
-            }}
-            className="px-5 py-2.5 bg-white hover:bg-red-50 text-red-700 font-extrabold rounded-xl text-xs shadow-lg flex items-center gap-2 shrink-0 transition-all active:scale-95"
-          >
-            <CheckCircle2 className="w-4 h-4 text-green-600" /> Acknowledge & Clear SOS
-          </button>
-        </div>
-      )}
 
       {/* Professional Corporate Header */}
       <div className="vms-header-hero p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -453,11 +467,11 @@ export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ profile,
             {activeVisits.length === 0 ? <p className="py-8 text-center text-gray-400 font-medium">No active visitors on campus right now.</p> : activeVisits.map(v => (
               <div key={v.id} className="py-3 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <img src={v.visitor_photo_url} alt="" className="w-10 h-10 rounded-xl object-cover ring-2 ring-gray-100" />
+                  <img src={v.visitor_photo_url || initialsAvatar(v.visitor_name)} alt="" className="w-10 h-10 rounded-xl object-cover ring-2 ring-gray-100" />
                   <div>
-                    <p className="font-bold text-gray-900 text-sm">{v.visitor_name}</p>
-                    <p className="text-gray-500 font-mono">{v.visitor_phone}</p>
-                    <p className="text-[#800080] font-semibold">Host: {v.host_name}</p>
+                    <p className="font-bold text-gray-900 text-sm">{v.visitor_name || 'Visitor'}</p>
+                    <p className="text-gray-500 font-mono">{v.visitor_phone ? (v.visitor_phone.startsWith('+') ? v.visitor_phone : `+91 ${v.visitor_phone}`) : ''}</p>
+                    <p className="text-[#800080] font-semibold">{v.host_name ? `Host: ${v.host_name}` : `Purpose: ${v.purpose || 'Campus Visit'}`}</p>
                   </div>
                 </div>
                 <button onClick={async () => { await vmsService.manualCheckOut(v.id); loadData(); }}
@@ -588,7 +602,7 @@ export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ profile,
                     <div key={v.id} className="p-4 bg-purple-50/30 border border-purple-100 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
                       <div className="flex items-start gap-3.5">
                         <img
-                          src={v.visitor_photo_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=300&q=80'}
+                          src={v.visitor_photo_url || initialsAvatar(v.visitor_name)}
                           alt=""
                           className="w-12 h-12 rounded-2xl object-cover ring-2 ring-purple-200 shadow-2xs shrink-0"
                         />
@@ -607,7 +621,7 @@ export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ profile,
                             </div>
                           </div>
                           <p className="text-xs text-[#731A73] font-semibold">
-                            Visited: {v.host_name} ({v.purpose})
+                            {v.host_name ? `Visited: ${v.host_name} (${v.purpose})` : `Purpose: ${v.purpose || 'Campus Visit'}`}
                           </p>
                           {v.feedback_comment && (
                             <p className="text-xs text-gray-800 bg-white p-2 rounded-xl border border-purple-100 italic font-medium">
@@ -705,46 +719,252 @@ export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ profile,
 
       {/* Tab: Staff Control */}
       {activeTab === 'staff' && (
-        <div className="p-6 space-y-4 bg-white rounded-3xl shadow-sm border border-purple-100">
-          <div className="flex items-center justify-between">
+        <div className="p-6 space-y-6 bg-white rounded-3xl shadow-sm border border-purple-100">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h3 className="font-heading font-bold text-lg text-gray-900">Receptionist & Staff Accounts</h3>
-              <p className="text-xs text-gray-500 font-medium">Manage operational staff accounts for {branch.name}</p>
+              <p className="text-xs text-gray-500 font-medium">Manage operational staff accounts and security credentials for {branch.name}</p>
             </div>
-            <button onClick={() => setIsAddingStaff(!isAddingStaff)} className="px-4 py-2 bg-[#731A73] text-white rounded-xl text-xs font-bold flex items-center gap-1.5"><UserPlus className="w-4 h-4" /> Create Account</button>
+            <button
+              onClick={() => {
+                setIsAddingStaff(!isAddingStaff);
+                if (!isAddingStaff) {
+                  const suffix = staff.filter(s => s.role === 'receptionist').length + 1;
+                  const prefix = (branch.name || 'reception').toLowerCase().replace(/[^a-z0-9]/g, '');
+                  setNewStaffLoginId(`${prefix}.reception${suffix}`);
+                  setNewStaffPassword('');
+                }
+              }}
+              className="px-4 py-2.5 bg-[#731A73] hover:bg-purple-900 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors shrink-0"
+            >
+              <UserPlus className="w-4 h-4" /> {isAddingStaff ? 'Cancel' : 'Create Staff Account'}
+            </button>
           </div>
-          {isAddingStaff && (
-            <form onSubmit={handleCreateStaff} className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-3 bg-purple-50/30 border border-purple-100 rounded-2xl">
-              <input type="text" required placeholder="Login ID" value={newStaffLoginId} onChange={(e) => setNewStaffLoginId(e.target.value)} className="text-xs p-2.5 rounded-xl border border-gray-300" />
-              <input type="text" required placeholder="Full Name" value={newStaffFullName} onChange={(e) => setNewStaffFullName(e.target.value)} className="text-xs p-2.5 rounded-xl border border-gray-300" />
-              <button type="submit" className="px-4 py-2.5 bg-[#731A73] text-white font-bold rounded-xl text-xs">Create</button>
-            </form>
+
+          {staffStatusMessage && (
+            <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-bold flex items-center gap-2 animate-fadeIn">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{staffStatusMessage}</span>
+            </div>
           )}
-          <div className="divide-y divide-gray-100 text-xs">
-            {staff.map(s => (
-              <div key={s.id} className="py-3 flex items-center justify-between">
-                <div>
-                  <p className="font-bold text-gray-900 text-sm">{s.full_name}</p>
-                  <p className="text-[#800080] font-mono">{s.login_id}</p>
+
+          {isAddingStaff && (
+            <form onSubmit={handleCreateStaff} className="p-5 bg-purple-50/40 border border-purple-200/80 rounded-2xl space-y-4 animate-fadeIn">
+              <div className="flex items-center justify-between">
+                <h4 className="font-bold text-sm text-purple-950 flex items-center gap-2">
+                  <UserPlus className="w-4 h-4 text-[#731A73]" /> Add New Front-Desk / Staff Member
+                </h4>
+                <span className="text-[11px] text-gray-500 font-medium">Branch: <strong>{branch.name}</strong></span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-700 block">Login ID <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. main.reception1"
+                    value={newStaffLoginId}
+                    onChange={(e) => setNewStaffLoginId(e.target.value)}
+                    className="w-full text-xs p-2.5 rounded-xl border border-purple-200 font-mono focus:ring-2 focus:ring-purple-400 focus:outline-none bg-white"
+                  />
                 </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-700 block">Full Name <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Ramesh Kumar"
+                    value={newStaffFullName}
+                    onChange={(e) => setNewStaffFullName(e.target.value)}
+                    className="w-full text-xs p-2.5 rounded-xl border border-purple-200 focus:ring-2 focus:ring-purple-400 focus:outline-none bg-white"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-gray-700 block">Custom Password <span className="text-red-500">*</span></label>
+                  <div className="relative">
+                    <input
+                      type={showNewStaffPassword ? "text" : "password"}
+                      required
+                      placeholder="Set custom password..."
+                      value={newStaffPassword}
+                      onChange={(e) => setNewStaffPassword(e.target.value)}
+                      className="w-full text-xs p-2.5 pr-9 rounded-xl border border-purple-200 font-mono focus:ring-2 focus:ring-purple-400 focus:outline-none bg-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewStaffPassword(!showNewStaffPassword)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-purple-800 p-1"
+                      title={showNewStaffPassword ? "Hide password" : "Show password"}
+                    >
+                      {showNewStaffPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+                <p className="text-[11px] text-gray-500">The staff member will use this Login ID and custom password to sign in at the front desk.</p>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={async () => {
-                      await vmsService.resetStaffPassword(s.id);
-                      alert(`Password reset requested for ${s.full_name}. User will be prompted on next login.`);
-                      loadData();
-                    }}
-                    className="px-3 py-1.5 text-xs text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl font-bold"
+                    type="button"
+                    onClick={() => setIsAddingStaff(false)}
+                    className="px-3.5 py-2 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded-xl"
                   >
-                    Reset Password
+                    Cancel
                   </button>
-                  <button onClick={async () => { await vmsService.toggleStaffStatus(s.id); loadData(); }}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border ${s.is_active ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
-                    {s.is_active ? 'Deactivate' : 'Reactivate'}
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-[#731A73] hover:bg-purple-900 text-white font-bold rounded-xl text-xs shadow-xs"
+                  >
+                    Create & Save Account
                   </button>
                 </div>
               </div>
-            ))}
+            </form>
+          )}
+
+          <div className="space-y-3">
+            {staff.length === 0 ? (
+              <p className="text-center py-8 text-gray-400 text-xs">No receptionist or staff accounts found for this branch.</p>
+            ) : (
+              staff.map(s => {
+                const isEditingPw = editingPasswordStaffId === s.id;
+                const isPwUpdated = passwordSuccessStaffId === s.id;
+
+                return (
+                  <div key={s.id} className="p-4 bg-gray-50/60 hover:bg-purple-50/20 border border-gray-200/80 rounded-2xl transition-all space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-purple-100 text-[#731A73] flex items-center justify-center font-bold text-sm uppercase shrink-0">
+                          {s.full_name.charAt(0)}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-extrabold text-sm text-gray-900">{s.full_name}</h4>
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                              s.role === 'branch_principal'
+                                ? 'bg-blue-100 text-blue-900 border border-blue-200'
+                                : 'bg-purple-100 text-purple-900 border border-purple-200'
+                            }`}>
+                              {s.role.replace('_', ' ')}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${s.is_active ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                              {s.is_active ? 'Active' : 'Deactivated'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[11px] text-gray-500 font-mono">ID: <strong className="text-purple-950 font-bold">{s.login_id}</strong></span>
+                            <button
+                              onClick={() => copyToClipboard(s.login_id, s.id)}
+                              className="p-0.5 text-gray-400 hover:text-purple-800 rounded"
+                              title="Copy Login ID"
+                            >
+                              {copiedLoginId === s.id ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={async () => {
+                            await vmsService.toggleStaffStatus(s.id);
+                            loadData();
+                          }}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors ${
+                            s.is_active ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                          }`}
+                        >
+                          {s.is_active ? 'Deactivate' : 'Reactivate'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Password Management Strip */}
+                    <div className="p-3 bg-white rounded-xl border border-purple-100/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <div className="flex items-center gap-2">
+                        <Lock className="w-4 h-4 text-purple-700 shrink-0" />
+                        <span className="text-xs font-bold text-gray-700">Password:</span>
+                        <span className="font-mono text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">••••••••••••</span>
+                        {isPwUpdated && (
+                          <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Updated & Saved!
+                          </span>
+                        )}
+                      </div>
+
+                      {isEditingPw ? (
+                        <div className="flex items-center gap-2">
+                          <div className="relative">
+                            <input
+                              type={showUpdatePassword ? "text" : "password"}
+                              placeholder="New custom password..."
+                              value={updatePasswordInput}
+                              onChange={(e) => setUpdatePasswordInput(e.target.value)}
+                              className="text-xs p-1.5 pr-8 rounded-lg border border-purple-300 font-mono focus:ring-2 focus:ring-purple-400 focus:outline-none w-48"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowUpdatePassword(!showUpdatePassword)}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-purple-800 p-0.5"
+                            >
+                              {showUpdatePassword ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                            </button>
+                          </div>
+                          <button
+                            onClick={() => handleUpdateStaffPassword(s.id, s.full_name)}
+                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors flex items-center gap-1"
+                          >
+                            <Check className="w-3.5 h-3.5" /> Save
+                          </button>
+                          <button
+                            onClick={() => {
+                              setEditingPasswordStaffId(null);
+                              setUpdatePasswordInput('');
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setEditingPasswordStaffId(s.id);
+                              setUpdatePasswordInput('');
+                              setShowUpdatePassword(false);
+                            }}
+                            className="px-3 py-1.5 text-xs font-bold text-[#731A73] bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-xl transition-colors flex items-center gap-1.5"
+                          >
+                            <Key className="w-3.5 h-3.5" /> Update Password
+                          </button>
+
+                          <button
+                            onClick={async () => {
+                              try {
+                                const newPw = await vmsService.resetStaffPassword(s.id);
+                                alert(`New auto-generated temporary password for ${s.full_name} (${s.login_id}):\n\n${newPw}\n\nShare it securely — it won't be shown again.`);
+                                loadData();
+                              } catch (e: any) {
+                                alert(`Password reset failed: ${e?.message || 'unknown error'}`);
+                              }
+                            }}
+                            className="px-3 py-1.5 text-xs text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl font-bold transition-colors"
+                            title="Generate a random temporary password"
+                          >
+                            Auto Reset
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       )}
@@ -804,7 +1024,7 @@ export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ profile,
         </div>
       )}
 
-      {isReportModalOpen && <ReportExporter scope="branch" targetName={branch.name} visits={visits} onClose={() => setIsReportModalOpen(false)} />}
+      {isReportModalOpen && <ReportExporter scope="branch" targetName={branch.name} visits={visits} college={college} onClose={() => setIsReportModalOpen(false)} />}
     </div>
   );
 };

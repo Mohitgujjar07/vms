@@ -4,13 +4,13 @@ import { vmsService } from '../../services/vmsService';
 import { CheckInModal } from './CheckInModal';
 import { CheckOutModal } from './CheckOutModal';
 import { VimtechLogo } from '../VimtechLogo';
-import SpecularButton from '../ui/SpecularButton';
 import LightBeamButton from '../ui/LightBeamButton';
 import { shareWhatsAppPassDirectly, generatePassImageBlob, copyPassPhotoToClipboard, buildWhatsAppPassMessage } from '../../utils/passImageGenerator';
 import {
   Users, UserCheck, QrCode, ShieldAlert, Search,
-  Clock, Plus, ArrowUpRight, CheckCircle2, UserCheck2, Copy, Check, Trash2, Star
+  Clock, Plus, ArrowUpRight, CheckCircle2, UserCheck2, Copy, Check, Star
 } from 'lucide-react';
+import { initialsAvatar } from '../../utils/avatar';
 
 interface ReceptionDashboardProps {
   profile: Profile;
@@ -20,13 +20,11 @@ interface ReceptionDashboardProps {
 export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ profile, branch }) => {
   const [visits, setVisits] = useState<Visit[]>([]);
   const [hosts, setHosts] = useState<Host[]>([]);
-  const [preRegVisits, setPreRegVisits] = useState<Visit[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'inside' | 'checked_out'>('all');
   const [isCheckInOpen, setIsCheckInOpen] = useState(false);
   const [isCheckOutOpen, setIsCheckOutOpen] = useState(false);
   const [checkOutTargetVisit, setCheckOutTargetVisit] = useState<Visit | null>(null);
-  const [sosSent, setSosSent] = useState(false);
   const [copiedVisitId, setCopiedVisitId] = useState<string | null>(null);
   const [college, setCollege] = useState<College | null>(null);
 
@@ -56,7 +54,6 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ profile,
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setNow(new Date());
       setCurrentTime(
         new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })
       );
@@ -79,44 +76,12 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ profile,
 
   const loadData = async () => {
     if (!branch?.id) return;
-    const branchVisits = await vmsService.getVisits(branch.id);
-    const branchHosts = await vmsService.getHosts(branch.id);
-    const preReg = await vmsService.getPreRegisteredVisits(branch.id);
-    
-    setVisits(branchVisits);
-    setHosts(branchHosts);
-    setPreRegVisits(preReg);
+    setVisits(await vmsService.getVisits(branch.id));
+    setHosts(await vmsService.getHosts(branch.id));
 
     if (branch.college_id) {
       const col = await vmsService.getCollegeById(branch.college_id);
       if (col) setCollege(col);
-    }
-  };
-
-  const handleFastTrackCheckIn = async (visitId: string) => {
-    await vmsService.checkInPreRegisteredVisit(visitId);
-    loadData();
-  };
-
-  const handleRaiseSos = async () => {
-    const confirmSos = window.confirm("Are you sure you want to trigger an EMERGENCY SOS ALERT to the Branch Principal?");
-    if (confirmSos) {
-      await vmsService.raiseSosAlert(
-        branch?.id || '22222222-2222-2222-2222-222222222222',
-        profile?.id || 'usr-reception',
-        profile?.full_name || 'Front Desk Duty Officer',
-        "Urgent assistance requested at front desk reception.",
-        branch?.name || 'Main Campus Front Gate'
-      );
-      setSosSent(true);
-      setTimeout(() => setSosSent(false), 5000);
-    }
-  };
-
-  const handleClearVisitorLog = async () => {
-    if (window.confirm(`Are you sure you want to clear Today's Visitor Log for ${branch.name}? This will purge visit records for this branch.`)) {
-      await vmsService.clearVisits(branch.id);
-      await loadData();
     }
   };
 
@@ -177,21 +142,12 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ profile,
           </div>
         </div>
 
-        {/* Right: IST Clock & SOS Trigger */}
+        {/* Right: IST Clock */}
         <div className="flex items-center gap-3">
-          <div className="px-3.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-right hidden sm:block">
+          <div className="px-3.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-right">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Live IST Clock</p>
             <p className="font-mono text-sm font-bold text-slate-800">{currentTime}</p>
           </div>
-
-          <LightBeamButton
-            onClick={handleRaiseSos}
-            variant={sosSent ? 'purple' : 'danger'}
-            className="px-4 py-2.5 text-xs font-bold shadow-md"
-          >
-            <ShieldAlert className="w-4 h-4 text-red-300" />
-            {sosSent ? 'SOS Broadcasted!' : 'Emergency SOS'}
-          </LightBeamButton>
         </div>
       </div>
 
@@ -295,13 +251,15 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ profile,
 
         <div className="vms-metric-premium accent-blue vms-card-shine">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black text-gray-500 uppercase tracking-wider">Available Hosts</span>
+            <span className="text-[10px] font-black text-gray-500 uppercase tracking-wider">Completed Visits</span>
             <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-              <UserCheck2 className="w-4 h-4" />
+              <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-3xl font-extrabold text-blue-600 mt-2 font-heading">{hosts.length}</p>
-          <p className="text-[11px] text-gray-400 mt-1 font-medium">Staff & Student directory</p>
+          <p className="text-3xl font-extrabold text-blue-600 mt-2 font-heading">
+            {todayVisits.filter(v => v.status === 'checked_out').length}
+          </p>
+          <p className="text-[11px] text-gray-400 mt-1 font-medium">Checked out today</p>
         </div>
       </div>
 
@@ -316,13 +274,6 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ profile,
                   {filteredVisits.length} Records
                 </span>
               </h3>
-              <button
-                onClick={handleClearVisitorLog}
-                title="Clear Today's Visitor Log"
-                className="px-2.5 py-1 rounded-xl text-xs font-bold bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 transition-all flex items-center gap-1 shadow-xs"
-              >
-                <Trash2 className="w-3.5 h-3.5" /> Clear Log
-              </button>
             </div>
             <p className="text-xs text-gray-500 mt-0.5 font-medium">Real-time check-in/out records for {branch.name}</p>
           </div>
@@ -367,7 +318,7 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ profile,
               <Search className="w-4 h-4 text-gray-400 absolute left-3.5 pointer-events-none z-10" />
               <input
                 type="text"
-                placeholder="Search visitor, phone, host..."
+                placeholder="Search visitor name, phone, purpose..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-48 sm:w-60 !pl-10 pr-8 py-2.5 text-xs font-medium rounded-2xl border-2 border-gray-200 focus:outline-none focus:border-[#800080] bg-white transition-all"
@@ -389,9 +340,9 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ profile,
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-gray-200 text-gray-500 font-extrabold uppercase tracking-wider text-[10px] bg-gray-50/50">
-                <th className="py-3.5 px-4">Visitor</th>
+                <th className="py-3.5 px-4">Name</th>
+                <th className="py-3.5 px-4">Phone Number</th>
                 <th className="py-3.5 px-4">Purpose</th>
-                <th className="py-3.5 px-4">Host Person</th>
                 <th className="py-3.5 px-4">Check-In Time</th>
                 <th className="py-3.5 px-4">Status</th>
                 <th className="py-3.5 px-4 text-right">Action</th>
@@ -404,7 +355,7 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ profile,
                     <div className="flex flex-col items-center gap-2">
                       <Search className="w-8 h-8 text-gray-300" />
                       <p className="font-semibold text-sm text-gray-500">No visitor records found</p>
-                      <p className="text-xs text-gray-400">Try searching a different name, phone, or host</p>
+                      <p className="text-xs text-gray-400">Try searching a different name, phone, or purpose</p>
                     </div>
                   </td>
                 </tr>
@@ -412,32 +363,21 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ profile,
                 filteredVisits.map(v => (
                   <tr key={v.id} className="hover:bg-purple-50/30 transition-colors">
                     <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-3">
-                        <img
-                          src={v.visitor_photo_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=300&q=80'}
-                          alt={v.visitor_name}
-                          className="w-10 h-10 rounded-xl object-cover ring-2 ring-gray-100 shadow-sm"
-                        />
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <p className="font-bold text-gray-900 text-xs sm:text-sm">{v.visitor_name}</p>
-                            {(v.category === 'AICTE/UNIV' || v.category === 'PLACEMENT' || v.category === 'GOVT' || v.category === 'RECRUITER') && (
-                              <span className="px-1.5 py-0.5 bg-amber-100 text-amber-900 rounded font-black text-[9px] uppercase border border-amber-200">
-                                ★ VIP
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[11px] text-gray-500 font-mono">{v.visitor_phone}</p>
-                        </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-gray-900 text-xs sm:text-sm">{v.visitor_name || 'Visitor'}</span>
+                        {(v.category === 'AICTE / University' || v.category === 'CDC Placement') && (
+                          <span className="px-1.5 py-0.5 bg-amber-100 text-amber-900 rounded font-black text-[9px] uppercase border border-amber-200">
+                            ★ VIP
+                          </span>
+                        )}
                       </div>
                     </td>
-                    <td className="py-3.5 px-4 text-gray-600 font-medium">{v.purpose}</td>
-                    <td className="py-3.5 px-4">
-                      <p className="text-[#800080] font-bold">{v.host_name}</p>
-                      <p className="text-[10px] text-gray-400 font-medium">{v.host_department}</p>
+                    <td className="py-3.5 px-4 font-mono font-bold text-gray-700 text-xs">
+                      {v.visitor_phone ? (v.visitor_phone.startsWith('+') ? v.visitor_phone : `+91 ${v.visitor_phone}`) : '-'}
                     </td>
+                    <td className="py-3.5 px-4 text-gray-600 font-medium">{v.purpose || '-'}</td>
                     <td className="py-3.5 px-4 font-mono text-gray-600 font-medium">
-                      {new Date(v.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(v.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
                     </td>
                     <td className="py-3.5 px-4">
                       <div className="space-y-1">
@@ -512,7 +452,7 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ profile,
           collegeId={branch.college_id}
           receptionistId={profile.id}
           receptionistName={profile.full_name}
-          hosts={hosts}
+          college={college}
           onClose={() => setIsCheckInOpen(false)}
           onSuccess={loadData}
         />
@@ -523,6 +463,7 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ profile,
           branchId={branch.id}
           activeVisits={activeVisits}
           initialVisit={checkOutTargetVisit}
+          college={college}
           onClose={() => {
             setIsCheckOutOpen(false);
             setCheckOutTargetVisit(null);

@@ -20,6 +20,12 @@ export interface College {
   contact_phone?: string;
   contact_email?: string;
   affiliations?: string[];
+
+  // White-label branding & packaging (used by passes, reports, tenant APK builds)
+  primary_color?: string;
+  secondary_color?: string;
+  package_id?: string;
+  app_build_status?: 'pending' | 'building' | 'built' | 'failed';
 }
 
 export interface Branch {
@@ -65,7 +71,8 @@ export interface Visit {
   id: string;
   visitor_id: string;
   branch_id: string;
-  host_id: string;
+  /** Optional — host selection removed from check-in flow */
+  host_id?: string | null;
   purpose: string;
   status: VisitStatus;
   qr_token: string;
@@ -109,19 +116,11 @@ export interface AuditLog {
   actor_name?: string;
   action: string;
   scope: 'branch' | 'college' | 'platform';
+  /** Tenant stamp — auto-populated from the active session profile on write */
+  college_id?: string | null;
+  branch_id?: string | null;
   metadata?: Record<string, any>;
   created_at: string;
-}
-
-export interface EmergencySosAlert {
-  id: string;
-  branch_id: string;
-  branch_name: string;
-  receptionist_id: string;
-  receptionist_name: string;
-  message: string;
-  created_at: string;
-  is_active: boolean;
 }
 
 /** Result returned after atomic college auto-provisioning */

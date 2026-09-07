@@ -12,7 +12,7 @@ export default defineConfig({
     },
   },
   server: {
-    port: 3000,
+    port: 5173,
     host: '0.0.0.0', // Expose to LAN for mobile access (192.168.x.x)
     strictPort: false,
     watch: {
@@ -24,6 +24,22 @@ export default defineConfig({
       'Referrer-Policy': 'strict-origin-when-cross-origin',
       'X-XSS-Protection': '1; mode=block',
       'Permissions-Policy': 'camera=(self), microphone=()',
+    },
+  },
+  build: {
+    // Split stable vendor libraries into cacheable chunks so app-code
+    // redeployments don't re-download them.
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (!id.includes('node_modules')) return undefined;
+          if (id.includes('react') || id.includes('scheduler')) return 'vendor-react';
+          if (id.includes('@supabase')) return 'vendor-supabase';
+          if (id.includes('framer-motion')) return 'vendor-motion';
+          if (id.includes('qrcode')) return 'vendor-qrcode';
+          return undefined;
+        },
+      },
     },
   },
 });

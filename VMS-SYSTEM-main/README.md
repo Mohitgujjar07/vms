@@ -32,7 +32,7 @@
 
 ## 📋 Overview
 
-**Vidyavahini VMS** is a production-grade, centralized visitor management platform designed for **multi-tenant institutional campuses**. It powers end-to-end visitor lifecycle management — from pre-registration and live camera photo capture to instant QR pass issuance, real-time check-out scanning, and branded PDF/Excel report generation.
+**Vidyavahini VMS** is a production-grade, centralized visitor management platform designed for **multi-tenant institutional campuses**. It powers end-to-end visitor lifecycle management — live camera photo capture, instant QR pass issuance, real-time check-out scanning, and branded PDF/Excel report generation.
 
 > **Platform Owner**: Vidyavahini Group  
 > **First Reference Tenant**: Vaisiri Institute of Management & Technology (**VIMTECH**), Tumkur  
@@ -59,16 +59,10 @@
 Super Admin (Platform Owner)
 ├── Multi-tenant overview & executive analytics
 ├── 1-form college onboarding wizard with auto-provisioning
-├── Executive white-label branding studio
-└── Global platform audit logs
+├── College logo / branding management
+└── Global platform audit logs & health telemetry
 
-College Admin (Master Admin)
-├── Multi-branch comparative analytics
-├── Dynamic college-wide safety density gauge
-├── Branch creation & principal account management
-└── College-scoped blacklist management
-
-Branch Principal
+Branch Principal (highest college-level tier)
 ├── Real-time campus safety density gauge
 ├── 7-day traffic trend charts
 ├── Host directory & CSV bulk import
@@ -80,21 +74,19 @@ Receptionist (Front Desk)
 ├── QR scanner check-out terminal
 ├── VIP / AICTE inspector badge workflows
 ├── Live IST clock & status filter tabs
-└── Pre-registered visitor fast-track queue
 ```
 
 ### 🔑 Core Capabilities
 
 | Capability | Description |
 |:---|:---|
-| **📸 Live Photo Capture** | Tablet/camera photo capture during check-in with Supabase Storage upload |
+| **📸 Live Photo Capture (Ephemeral)** | Tablet/camera photo shown instantly on the pass — never uploaded or stored anywhere |
 | **🔲 Instant QR Pass** | Auto-generated single-use QR token per visit with expiration enforcement |
 | **🌐 Offline-First Engine** | Dexie.js (IndexedDB) local writes with automatic background sync on reconnect |
 | **🔒 On-Device Deduplication** | Prevents duplicate active check-ins entirely on-device without network |
 | **📊 Branded Reports** | PDF & Excel exports with institutional letterhead, principal signature lines |
 | **🆘 Emergency SOS** | Real-time security alert broadcast overlay with 1-click acknowledge |
 | **🌍 Multilingual** | English, ಕನ್ನಡ (Kannada), हिन्दी (Hindi) language support |
-| **👁️ Pre-Registration Portal** | Public-facing form for visitors to pre-register with department/host selection |
 | **🖥️ Lobby Kiosk Mode** | Self-service touch kiosk with bilingual UI and selfie camera capture |
 | **🎨 Branding Studio** | Logo upload, pass preview modes, color theme customization, JSON config export |
 | **📋 Audit Trail** | Every action logged with actor, role, scope, and JSONB metadata |
@@ -133,7 +125,7 @@ Receptionist (Front Desk)
              ▼                                                     ▼
 ┌──────────────────────────┐                         ┌──────────────────────────┐
 │   VIMTECH College        │                         │  Another College         │
-│   (Master Admin)         │                         │  (Master Admin)          │
+│   (Branch Principal)     │                         │  (Branch Principal)      │
 └────────────┬─────────────┘                         └────────────┬─────────────┘
              │                                                    │
      ┌───────┴───────┐                                            │
@@ -318,7 +310,6 @@ Every table enforces access policies via `get_current_profile()`:
 | Role | Scope | Access Level |
 |:---|:---|:---|
 | `super_admin` | Platform-wide | Full CRUD on all tables |
-| `master_admin` | College-scoped | Manage branches, principals |
 | `branch_principal` | Branch-scoped | Manage hosts, receptionists, blacklist |
 | `receptionist` | Branch-scoped | Check-in/out, view hosts |
 
@@ -335,7 +326,7 @@ Every table enforces access policies via `get_current_profile()`:
 
 - **Soft Deletion**: Accounts & tenants are suspended (`is_active = false`), never hard-deleted
 - **Audit Trail**: Every action logged with actor, role, scope, and JSONB metadata
-- **Storage**: Visitor photos stored in Supabase Storage with bucket-level RLS
+- **Storage**: Visitor photos are NEVER stored (ephemeral-by-design) — zero PII at rest
 - **CSP Headers**: Content Security Policy enforced via `<meta>` tag
 
 ---
@@ -418,7 +409,6 @@ vms-system/
 │   │   ├── 📂 reception/             # Check-in modal, check-out scanner, dashboard
 │   │   ├── 📂 reports/               # PDF & Excel export engine
 │   │   ├── 📂 sos/                   # Emergency SOS broadcast system
-│   │   ├── 📂 public/                # Pre-registration portal & lobby kiosk
 │   │   ├── 📂 common/                # Shared UI components
 │   │   ├── 📂 ui/                    # Design system primitives
 │   │   ├── Navbar.tsx                # Multi-tenant header & sync status

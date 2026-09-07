@@ -12,15 +12,15 @@ This document details the architectural principles, data flows, offline-first me
                     │           (Super Admin)                 │
                     └───────────────────┬─────────────────────┘
                                         │
-             ┌──────────────────────────┴──────────────────────────┐
-             ▼                                                     ▼
+              ┌──────────────────────────┴──────────────────────────┐
+              ▼                                                     ▼
 ┌──────────────────────────┐                         ┌──────────────────────────┐
 │   VIMTECH College        │                         │  BBA Institute College   │
-│   (Master Admin)         │                         │  (Master Admin)          │
+│   (Branch Principal)     │                         │  (Branch Principal)      │
 └────────────┬─────────────┘                         └────────────┬─────────────┘
-             │                                                    │
-     ┌───────┴───────┐                                            │
-     ▼               ▼                                            ▼
+              │                                                    │
+      ┌───────┴───────┐                                            │
+      ▼               ▼                                            ▼
 ┌─────────┐     ┌─────────┐                                  ┌─────────┐
 │ Main    │     │ City    │                                  │ Koram.  │
 │ Campus  │     │ Campus  │                                  │ Campus  │
@@ -28,8 +28,7 @@ This document details the architectural principles, data flows, offline-first me
 ```
 
 - **Super Admin** (`role = 'super_admin'`) = Platform owner account (Vidyavahini Group). Single platform-wide account.
-- **Master Admin** (`role = 'master_admin'`) = College administrator account (one per college).
-- **Branch Principal** (`role = 'branch_principal'`) = Campus principal account (one per branch).
+- **Branch Principal** (`role = 'branch_principal'`) = Campus principal account (one per branch); the highest college-level tier in the current implementation.
 - **Receptionist** (`role = 'receptionist'`) = Front-desk operator (one or more per branch).
 - **Tenant Isolation**: Enforced strictly at the database level using Supabase Row Level Security (RLS). Every query automatically includes scope checks derived from the user's authenticated `profiles` record.
 
@@ -40,8 +39,7 @@ This document details the architectural principles, data flows, offline-first me
 When a Super Admin onboards a new college tenant, the system atomically provisions:
 1. **College Record**: Name, display name, tagline, address, contact details.
 2. **Default Branch**: Primary campus branch location.
-3. **Three Credentials**:
-   - `Master Admin`: `{code}.masteradmin`
+3. **Two Credentials**:
    - `Branch Principal`: `{code}.principal`
    - `Receptionist`: `{code}.reception1`
    - Password set to `{DisplayName}@2026` with `must_change_password = true`.

@@ -4,10 +4,10 @@
  * error handling, offline fallback, and logging.
  */
 
-import { supabase, isOnlineAndSupabaseReady } from '../../lib/supabaseClient';
+import { supabase, isOnlineAndSupabaseReady, createIsolatedSupabaseClient } from '../../lib/supabaseClient';
 import { telemetry } from '../telemetryService';
 
-export { supabase, isOnlineAndSupabaseReady };
+export { supabase, isOnlineAndSupabaseReady, createIsolatedSupabaseClient };
 
 /**
  * Execute a Supabase query with standardized error handling.

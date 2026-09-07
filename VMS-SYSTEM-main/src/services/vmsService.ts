@@ -9,7 +9,7 @@
  *   receptionist → per-branch front desk
  */
 
-import { College, Branch, Profile, Host, Visitor, Visit, BlacklistEntry, AuditLog, EmergencySosAlert, CollegeProvisioningResult } from '../types';
+import { College, Branch, Profile, Host, Visitor, Visit, BlacklistEntry, AuditLog, CollegeProvisioningResult } from '../types';
 import { authService } from './authService';
 import { directoryService } from './directoryService';
 import { visitService } from './visitService';
@@ -46,13 +46,9 @@ class VmsService {
     return authService.changePassword(profileId);
   }
 
-  // ─── CLOUD PHOTO STORAGE ──────────────────────────────────────
-
-  async uploadVisitorPhoto(photoDataUrl: string, fileName?: string): Promise<string> {
-    return visitService.uploadVisitorPhoto(photoDataUrl, fileName);
-  }
-
   // ─── COLLEGES & BRANCHES ─────────────────────────────────────
+  // NOTE: Visitor photos are intentionally NEVER uploaded or stored (ephemeral-by-design).
+  // Captured photos exist only in React state for the instant printable pass.
 
   async getColleges(): Promise<College[]> {
     return directoryService.getColleges();
@@ -171,7 +167,7 @@ class VmsService {
     return directoryService.updateUserAccount(profileId, updates);
   }
 
-  async resetStaffPassword(profileId: string): Promise<void> {
+  async resetStaffPassword(profileId: string): Promise<string> {
     return directoryService.resetStaffPassword(profileId);
   }
 
@@ -229,20 +225,6 @@ class VmsService {
     return visitService.clearVisits(branchId);
   }
 
-  // ─── PRE-REGISTRATION ─────────────────────────────────────────
-
-  async getPreRegisteredVisits(branchId: string): Promise<Visit[]> {
-    return visitService.getPreRegisteredVisits(branchId);
-  }
-
-  async checkInPreRegisteredVisit(visitId: string): Promise<Visit> {
-    return visitService.checkInPreRegisteredVisit(visitId);
-  }
-
-  async addPreRegisteredVisit(visit: Visit): Promise<Visit> {
-    return visitService.addPreRegisteredVisit(visit);
-  }
-
   // ─── BLACKLIST MANAGEMENT ─────────────────────────────────────
 
   async checkBlacklist(phone: string, branchId: string, collegeId?: string): Promise<BlacklistEntry | null> {
@@ -269,20 +251,6 @@ class VmsService {
     return securityService.escalateBlacklistEntry(id);
   }
 
-  // ─── EMERGENCY SOS ALERTS ─────────────────────────────────────
-
-  async raiseSosAlert(branchId: string, receptionistId: string, receptionistName: string, message: string, location?: string): Promise<EmergencySosAlert> {
-    return securityService.raiseSosAlert(branchId, receptionistId, receptionistName, message, location);
-  }
-
-  async getActiveSosAlerts(branchId?: string): Promise<EmergencySosAlert[]> {
-    return securityService.getActiveSosAlerts(branchId);
-  }
-
-  async dismissSosAlert(alertId: string): Promise<void> {
-    return securityService.dismissSosAlert(alertId);
-  }
-
   // ─── AUDIT LOGS & NOTIFICATIONS ───────────────────────────────
 
   async logAudit(actorId?: string, actorName?: string, action?: string, scope?: 'branch' | 'college' | 'platform', metadata?: any): Promise<void> {
@@ -298,7 +266,6 @@ class VmsService {
   async getSystemHealthMetrics(): Promise<{
     stuckSyncCount: number;
     failedLogins24h: number;
-    activeSosCount: number;
     cloudLatencyMs: number;
     cloudStatus: 'healthy' | 'degraded' | 'offline';
   }> {
@@ -345,17 +312,9 @@ class VmsService {
       ).length;
     } catch (e) { /* silent */ }
 
-    // 4. Count active SOS alerts
-    let activeSosCount = 0;
-    try {
-      const sosList = await securityService.getActiveSosAlerts();
-      activeSosCount = sosList.length;
-    } catch (e) { /* silent */ }
-
     return {
       stuckSyncCount,
       failedLogins24h,
-      activeSosCount,
       cloudLatencyMs,
       cloudStatus
     };

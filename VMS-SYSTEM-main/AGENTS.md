@@ -69,12 +69,11 @@ vms system/
 │   └── progress.md              # Feature completion matrix & roadmap
 ├── src/
 │   ├── components/
-│   │   ├── masteradmin/         # Platform Owner (Super Admin) dashboard & tenant onboarding
 │   │   ├── principal/           # Branch Principal analytics, CSV host import, staff control
 │   │   ├── reception/           # Mobile-first check-in, photo capture, QR scanner check-out
 │   │   ├── reports/             # Formatted PDF & Excel report export modal
 │   │   ├── sos/                 # Real-time Emergency SOS alert overlay
-│   │   ├── superadmin/          # College Admin (Master Admin) multi-branch stats & management
+│   │   ├── superadmin/          # Platform Owner (Super Admin) dashboard, tenant onboarding & credentials
 │   │   └── Navbar.tsx           # Multi-tenant header & sync status
 │   ├── lib/
 │   │   └── supabaseClient.ts    # Supabase client setup with mock fallback

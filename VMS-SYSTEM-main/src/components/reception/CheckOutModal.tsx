@@ -1,29 +1,36 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Visit } from '../../types';
+import { Visit, College } from '../../types';
 import { vmsService } from '../../services/vmsService';
-import { Html5Qrcode } from 'html5-qrcode';
+import type { Html5Qrcode } from 'html5-qrcode';
 import {
   X, QrCode, Search, CheckCircle2, AlertCircle, Clock, User, Zap, Image as ImageIcon,
   Sparkles, RefreshCw, Key, LogOut, ArrowRight, ShieldCheck, Star, MessageSquare,
   ThumbsUp, Check, ChevronRight, Camera, ArrowLeft, Printer, Heart, ThumbsDown,
   FileCheck, Shield, Building2, MapPin, Share2, MessageCircle, Scan, Flame
 } from 'lucide-react';
-import { VimtechLogo } from '../common/VimtechLogo';
+import { initialsAvatar } from '../../utils/avatar';
+import { VimtechLogo } from '../VimtechLogo';
 
 interface CheckOutModalProps {
   branchId: string;
   activeVisits: Visit[];
   initialVisit?: Visit | null;
+  /** Tenant identity — drives white-label exit slip branding */
+  college?: College | null;
   onClose: () => void;
   onSuccess: () => void;
 }
 
 export const CheckOutModal: React.FC<CheckOutModalProps> = ({
-  branchId, activeVisits, initialVisit, onClose, onSuccess
+  branchId, activeVisits, initialVisit, college, onClose, onSuccess
 }) => {
+  const tenantName = college?.display_name || 'Campus';
   const [step, setStep] = useState<'select' | 'review' | 'success'>(initialVisit ? 'review' : 'select');
   const [tab, setTab] = useState<'scanner' | 'manual'>('scanner');
   const [pendingVisit, setPendingVisit] = useState<Visit | null>(initialVisit || null);
+  // When the visitor was identified via QR scan, remember the raw token so the final
+  // checkout goes through processCheckOut() — enforcing single-use & branch scope.
+  const [pendingToken, setPendingToken] = useState<string | null>(null);
   const [manualQuery, setManualQuery] = useState('');
   const [manualToken, setManualToken] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -31,9 +38,9 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Mandatory Visitor Feedback state (1 to 5 Stars & Compulsory Comment)
-  const [selectedRating, setSelectedRating] = useState<number>(5);
+  const [selectedRating, setSelectedRating] = useState<number>(0);
   const [hoverRating, setHoverRating] = useState<number | null>(null);
-  const [feedbackComment, setFeedbackComment] = useState<string>('Exceptional campus hospitality & prompt host meeting.');
+  const [feedbackComment, setFeedbackComment] = useState<string>('');
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   
   // Scanner state & controls
@@ -96,8 +103,17 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = ({
 
     const startCamera = async () => {
       try {
-        qrScanner = new Html5Qrcode("qr-reader-viewport");
+        // Lazy-load the QR scanner engine only when the scanner tab is opened
+        const { Html5Qrcode: ScannerCtor } = await import('html5-qrcode');
+        if (!isMounted) return; // modal closed while engine was loading — don't touch the camera
+        qrScanner = new ScannerCtor("qr-reader-viewport");
         html5QrCodeRef.current = qrScanner;
+
+        if (!isMounted) { // double-check after construction
+          qrScanner.clear();
+          html5QrCodeRef.current = null;
+          return;
+        }
 
         await qrScanner.start(
           { facingMode: cameraFacing },
@@ -149,10 +165,11 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = ({
     };
   }, [tab, step, cameraFacing]);
 
-  const handleSelectVisitForReview = (visit: Visit) => {
+  const handleSelectVisitForReview = (visit: Visit, token?: string) => {
     setPendingVisit(visit);
-    setSelectedRating(5);
-    setFeedbackComment('Exceptional campus hospitality & prompt host meeting.');
+    setPendingToken(token || null);
+    setSelectedRating(0);
+    setFeedbackComment('');
     setFeedbackError(null);
     setErrorMessage(null);
     setStep('review');
@@ -173,9 +190,13 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = ({
     setErrorMessage(null);
     try {
       const cleanToken = token.trim().toLowerCase();
-      let visit = activeVisits.find(v => (v.qr_token || '').toLowerCase() === cleanToken || v.qr_token === token.trim());
+      const isRealQrToken = (v: Visit) => (v.qr_token || '').toLowerCase() === cleanToken || v.qr_token === token.trim();
+      let visit = activeVisits.find(isRealQrToken);
+      // Phone/id fallbacks are NOT QR tokens — they must go through manualCheckOut
+      let matchedByFallback = false;
       if (!visit) {
         visit = activeVisits.find(v => v.visitor_phone === token.trim() || v.id === token.trim());
+        matchedByFallback = !!visit;
       }
       if (!visit) {
         const allVisits = await vmsService.getVisits(branchId);
@@ -184,7 +205,8 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = ({
       if (!visit) {
         throw new Error(`No active visitor inside campus matches pass token "${token.trim()}".`);
       }
-      handleSelectVisitForReview(visit);
+      // Only genuine QR tokens enforce single-use/branch-scope via processCheckOut
+      handleSelectVisitForReview(visit, matchedByFallback ? undefined : token.trim());
     } catch (err: any) {
       setErrorMessage(err?.message || 'Check-out token verification failed.');
     } finally {
@@ -194,7 +216,7 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = ({
 
   const handleConfirmCheckoutWithReview = async () => {
     if (!pendingVisit) return;
-    
+
     // Validate mandatory feedback rating and comment
     if (!selectedRating || selectedRating < 1 || selectedRating > 5) {
       setFeedbackError('Please choose a star rating (1 to 5 Stars).');
@@ -211,7 +233,9 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = ({
     setErrorMessage(null);
 
     try {
-      const result = await vmsService.manualCheckOut(pendingVisit.id, selectedRating, feedbackComment.trim());
+      const result = pendingToken
+        ? await vmsService.processCheckOut(pendingToken, branchId, selectedRating, feedbackComment.trim())
+        : await vmsService.manualCheckOut(pendingVisit.id, selectedRating, feedbackComment.trim());
       setSuccessVisit(result.visit);
       setStep('success');
       onSuccess();
@@ -256,7 +280,8 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = ({
     setErrorMessage(null);
 
     try {
-      const html5Qrcode = new Html5Qrcode("qr-file-decoder");
+      const { Html5Qrcode: ScannerCtor } = await import('html5-qrcode');
+      const html5Qrcode = new ScannerCtor("qr-file-decoder");
       const decodedText = await html5Qrcode.scanFile(file, false);
       html5Qrcode.clear();
       await handleSelectTokenForReview(decodedText);
@@ -353,14 +378,14 @@ export const CheckOutModal: React.FC<CheckOutModalProps> = ({
       ? new Date(visit.check_out_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
       : 'Just now';
 
-    const message = 
-`🏛️ *VIMTECH CAMPUS EXIT CLEARANCE SLIP*
-*Vidyavahini Institute of Management & Technology*
-━━━━━━━━━━━━━━━━━━━━━
+    const message =
+`🏛️ *${tenantName.toUpperCase()} CAMPUS EXIT CLEARANCE SLIP*
+*${college?.name || 'Vidyavahini Group Campus'}*
+━━━━━━━━━━━━━━━━━━━━
 
 Dear *${visit.visitor_name || 'Valued Visitor'}*,
 
-Thank you for visiting VIMTECH Campus. Your gate exit clearance has been authorized & recorded:
+Thank you for visiting ${tenantName} Campus. Your gate exit clearance has been authorized & recorded:
 
 📋 *VISIT SUMMARY*
 ▸ *Visitor Name*: ${visit.visitor_name}
@@ -376,8 +401,7 @@ Thank you for visiting VIMTECH Campus. Your gate exit clearance has been authori
 • Gate status verified: Clean Exit Approved.
 • We look forward to welcoming you again!
 
-_Issued by Front Desk Reception | VIMTECH Centralised VMS_
-🌐 www.vimtech.in`;
+_Issued by Front Desk Reception | ${tenantName} Centralised VMS_`;
 
     const whatsappUrl = `https://api.whatsapp.com/send?phone=${phoneWithCountryCode}&text=${encodeURIComponent(message)}`;
     window.open(whatsappUrl, '_blank');
@@ -487,7 +511,7 @@ _Issued by Front Desk Reception | VIMTECH Centralised VMS_
                 <div className="flex items-center gap-3.5 min-w-0">
                   <div className="relative shrink-0">
                     <img
-                      src={pendingVisit.visitor_photo_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=300&q=80'}
+                      src={pendingVisit.visitor_photo_url || initialsAvatar(pendingVisit.visitor_name)}
                       alt={pendingVisit.visitor_name}
                       className="w-14 h-14 rounded-2xl object-cover ring-2 ring-[#731A73] shadow-sm"
                     />
@@ -668,7 +692,7 @@ _Issued by Front Desk Reception | VIMTECH Centralised VMS_
                 <div className="flex items-center justify-between border-b border-purple-100 pb-2.5">
                   <div className="flex items-center gap-2">
                     <ShieldCheck className="w-4.5 h-4.5 text-[#731A73]" />
-                    <span className="text-[11px] font-black uppercase tracking-wider text-[#731A73]">VIMTECH GATE EXIT SLIP</span>
+                    <span className="text-[11px] font-black uppercase tracking-wider text-[#731A73]">{tenantName} GATE EXIT SLIP</span>
                   </div>
                   <span className="text-[9px] font-mono font-black text-amber-900 bg-amber-100 px-2 py-0.5 rounded-md border border-amber-200">
                     CLEARANCE APPROVED
@@ -677,7 +701,7 @@ _Issued by Front Desk Reception | VIMTECH Centralised VMS_
 
                 <div className="flex items-center gap-3.5 pb-2">
                   <img
-                    src={successVisit.visitor_photo_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=300&q=80'}
+                    src={successVisit.visitor_photo_url || initialsAvatar(successVisit.visitor_name)}
                     alt={successVisit.visitor_name}
                     className="w-13 h-13 rounded-xl object-cover ring-2 ring-purple-300 shadow-2xs"
                   />
@@ -913,7 +937,7 @@ _Issued by Front Desk Reception | VIMTECH Centralised VMS_
                         <div className="flex items-center gap-3.5 min-w-0">
                           <div className="relative shrink-0">
                             <img
-                              src={v.visitor_photo_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=300&q=80'}
+                              src={v.visitor_photo_url || initialsAvatar(v.visitor_name)}
                               alt={v.visitor_name}
                               className="w-12 h-12 rounded-2xl object-cover ring-2 ring-purple-100 shadow-2xs"
                             />

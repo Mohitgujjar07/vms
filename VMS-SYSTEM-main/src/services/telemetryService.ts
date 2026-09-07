@@ -16,17 +16,47 @@ export interface TelemetryContext {
 class TelemetryService {
   private sentryDsn: string = (import.meta as any).env?.VITE_SENTRY_DSN || '';
   private isInitialized: boolean = false;
+  private sentryReady: boolean = false;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private sentryModule: any = null;
   private currentUserContext: TelemetryContext = {};
 
   /**
-   * Initialize error tracking telemetry on app launch
+   * Initialize error tracking telemetry on app launch.
+   * When VITE_SENTRY_DSN is configured, the Sentry SDK is lazily imported
+   * (kept out of the main bundle) and initialized with tenant-aware tagging.
    */
   initTelemetry(): void {
     if (this.isInitialized) return;
     this.isInitialized = true;
 
-    if (this.sentryDsn) {
-      console.log('⚡ Sentry Telemetry initialized with DSN configuration.');
+    if (this.sentryDsn && typeof window !== 'undefined') {
+      // Lazy-load the SDK only when a DSN is configured — zero bundle cost otherwise
+      import('@sentry/browser')
+        .then((Sentry) => {
+          Sentry.init({
+            dsn: this.sentryDsn,
+            environment: (import.meta as any).env?.MODE || 'development',
+            release: 'vms@' + ((import.meta as any).env?.npm_package_version || '1.0.0'),
+            beforeSend(event) {
+              // PRIVACY: strip any potential photo/data-URI payloads from breadcrumbs
+              if (event.breadcrumbs) {
+                event.breadcrumbs = event.breadcrumbs.filter(b =>
+                  !(b.message || '').includes('data:image')
+                );
+              }
+              return event;
+            }
+          });
+          // Keep a direct module reference — captureException must not depend on
+          // window.Sentry existing (dynamic import never sets it).
+          this.sentryModule = Sentry;
+          this.sentryReady = true;
+          console.log('⚡ Sentry Telemetry initialized with DSN configuration.');
+        })
+        .catch((e) => {
+          console.warn('Sentry init notice:', e);
+        });
     } else {
       console.log('ℹ️ Local Telemetry initialized (Sentry DSN not provided in env).');
     }
@@ -79,16 +109,17 @@ class TelemetryService {
       metadata: mergedContext.metadata
     });
 
-    // Send to Sentry SDK if configured in production
-    if (typeof (window as any).Sentry !== 'undefined') {
+    // Send to the lazily-initialized SDK module (or a CDN-provided global if present)
+    const sdk = this.sentryModule || ((typeof window !== 'undefined' ? (window as any).Sentry : null));
+    if (this.sentryReady && sdk) {
       try {
-        (window as any).Sentry.withScope((scope: any) => {
+        sdk.withScope((scope: any) => {
           if (mergedContext.role) scope.setTag('user.role', mergedContext.role);
           if (mergedContext.college_id) scope.setTag('college_id', mergedContext.college_id);
           if (mergedContext.branch_id) scope.setTag('branch_id', mergedContext.branch_id);
           if (mergedContext.action) scope.setTag('action', mergedContext.action);
           if (mergedContext.metadata) scope.setExtras(mergedContext.metadata);
-          (window as any).Sentry.captureException(errObj);
+          sdk.captureException(errObj);
         });
       } catch (e) {
         /* silent */
