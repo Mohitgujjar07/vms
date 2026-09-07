@@ -14,6 +14,7 @@ import { User, KeyRound, ArrowRight, Eye, EyeOff, Phone } from 'lucide-react';
 import { INITIAL_COLLEGES, INITIAL_BRANCHES } from './services/mockData';
 import { purgeLegacyMockCache, purgeLocalTenantCache } from './offline/purgeCache';
 import { telemetry } from './services/telemetryService';
+import { MobileSplashScreen } from './components/common/MobileSplashScreen';
 
 /** Remember which college's data is cached locally (shared-device isolation) */
 const readCachedCollegeId = (): string | null => {
@@ -82,6 +83,11 @@ export const App: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberLogin, setRememberLogin] = useState(true);
   const [showSecurityHelp, setShowSecurityHelp] = useState(false);
+  // Mobile Splash Screen: shown when opening on mobile screens / Capacitor
+  const [showSplash, setShowSplash] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth <= 768 || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  });
 
   useEffect(() => {
     telemetry.initTelemetry();
@@ -179,6 +185,9 @@ export const App: React.FC = () => {
   const activeBranch = branches.find(b => b.id === activeBranchId) || branches[0];
 
   if (isInitializing) {
+    if (showSplash) {
+      return <MobileSplashScreen onFinish={() => setShowSplash(false)} />;
+    }
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">
         <div className="flex flex-col items-center gap-3">
@@ -191,6 +200,7 @@ export const App: React.FC = () => {
 
   return (
     <ErrorBoundary>
+      {showSplash && <MobileSplashScreen onFinish={() => setShowSplash(false)} />}
       <div className="min-h-screen bg-[#f8fafc] text-gray-800 flex flex-col font-sans">
         {currentProfile ? (
           <>
