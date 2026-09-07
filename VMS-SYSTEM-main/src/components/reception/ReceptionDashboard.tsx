@@ -3,12 +3,14 @@ import { Profile, Branch, Visit, Host, College } from '../../types';
 import { vmsService } from '../../services/vmsService';
 import { CheckInModal } from './CheckInModal';
 import { CheckOutModal } from './CheckOutModal';
+import { ReportExporter } from '../reports/ReportExporter';
 import { VimtechLogo } from '../VimtechLogo';
 import LightBeamButton from '../ui/LightBeamButton';
 import { shareWhatsAppPassDirectly, generatePassImageBlob, copyPassPhotoToClipboard, buildWhatsAppPassMessage } from '../../utils/passImageGenerator';
 import {
   Users, UserCheck, QrCode, ShieldAlert, Search,
-  Clock, Plus, ArrowUpRight, CheckCircle2, UserCheck2, Copy, Check, Star
+  Clock, Plus, ArrowUpRight, CheckCircle2, UserCheck2, Copy, Check, Star,
+  FileText
 } from 'lucide-react';
 import { initialsAvatar } from '../../utils/avatar';
 
@@ -27,6 +29,7 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ profile,
   const [checkOutTargetVisit, setCheckOutTargetVisit] = useState<Visit | null>(null);
   const [copiedVisitId, setCopiedVisitId] = useState<string | null>(null);
   const [college, setCollege] = useState<College | null>(null);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   const handleCopyPassPhoto = async (visit: Visit) => {
     try {
@@ -142,8 +145,15 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ profile,
           </div>
         </div>
 
-        {/* Right: IST Clock */}
+        {/* Right: Export Reports & IST Clock */}
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setIsReportModalOpen(true)}
+            className="px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 shrink-0 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 shadow-sm transition-all"
+          >
+            <FileText className="w-4 h-4 text-purple-700" /> Export Reports
+          </button>
           <div className="px-3.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-right">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Live IST Clock</p>
             <p className="font-mono text-sm font-bold text-slate-800">{currentTime}</p>
@@ -332,6 +342,17 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ profile,
                 </button>
               )}
             </div>
+
+            {/* Quick Export Button */}
+            <button
+              type="button"
+              onClick={() => setIsReportModalOpen(true)}
+              className="px-3.5 py-2.5 bg-purple-50 hover:bg-purple-100 text-[#731A73] border border-purple-200 rounded-2xl text-xs font-extrabold flex items-center gap-1.5 shadow-2xs transition-all active:scale-95 shrink-0"
+              title="Export Reports (PDF / Excel)"
+            >
+              <FileText className="w-4 h-4 text-[#731A73]" />
+              <span>Export</span>
+            </button>
           </div>
         </div>
 
@@ -469,6 +490,16 @@ export const ReceptionDashboard: React.FC<ReceptionDashboardProps> = ({ profile,
             setCheckOutTargetVisit(null);
           }}
           onSuccess={loadData}
+        />
+      )}
+
+      {isReportModalOpen && (
+        <ReportExporter
+          scope="branch"
+          targetName={branch.name}
+          visits={visits}
+          college={college}
+          onClose={() => setIsReportModalOpen(false)}
         />
       )}
     </div>
