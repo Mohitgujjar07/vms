@@ -73,7 +73,7 @@ export const SecurityHelpModal: React.FC<SecurityHelpModalProps> = ({ onClose })
                   If you are a receptionist or gate security officer unable to log in:
                 </p>
                 <ul className="list-disc pl-4 space-y-1 text-gray-700 font-semibold">
-                  <li>Verify that your <strong>Login ID</strong> follows format: <code>super.admin</code> or <code>vimtech.reception1</code></li>
+                  <li>Verify that your <strong>Login ID</strong> follows format: <code>super.admin</code>, <code>Pradeepkumar.nb@gmail.com</code>, or <code>vimtech.reception1</code></li>
                   <li>Passwords are issued privately by your Branch Principal / IT Admin — ask them to reset it if forgotten</li>
                   <li>Ensure your keyboard <strong>Caps Lock</strong> is turned off</li>
                 </ul>

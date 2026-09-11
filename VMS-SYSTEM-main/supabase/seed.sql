@@ -101,12 +101,14 @@ on conflict (id) do nothing;
 -- ====================================================================
 do $$
 declare
-  super_uid   uuid := '77777777-7777-7777-7777-777777777777';
+  super_uid     uuid := '77777777-7777-7777-7777-777777777777';
+  super_uid_2   uuid := '19b0204b-c43d-4952-8d7a-95e3d59f3c88';
   principal_uid uuid := '99999999-9999-9999-9999-999999999999';
   reception_uid uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
-  pw_hash text := crypt('Vimtech@2026', gen_salt('bf'));
+  pw_hash       text := crypt('Vimtech@2026', gen_salt('bf'));
+  pw_hash_2     text := crypt('VIMTECH@9900', gen_salt('bf'));
 begin
-  -- Super Admin (platform-wide)
+  -- Super Admin 1 (platform-wide)
   insert into auth.users (instance_id, id, aud, role, email, encrypted_password,
     email_confirmed_at, created_at, updated_at,
     raw_app_meta_data, raw_user_meta_data, confirmation_token, recovery_token)
@@ -115,6 +117,18 @@ begin
     now(), now(), now(),
     '{"provider":"email","providers":["email"]}',
     '{"login_id":"super.admin","full_name":"Platform Controller (Vidyavahini Group)","role":"super_admin"}',
+    '', '')
+  on conflict (id) do nothing;
+
+  -- Super Admin 2 (Pradeep Kumar N B)
+  insert into auth.users (instance_id, id, aud, role, email, encrypted_password,
+    email_confirmed_at, created_at, updated_at,
+    raw_app_meta_data, raw_user_meta_data, confirmation_token, recovery_token)
+  values ('00000000-0000-0000-0000-000000000000', super_uid_2, 'authenticated', 'authenticated',
+    'pradeepkumar.nb@gmail.com', pw_hash_2,
+    now(), now(), now(),
+    '{"provider":"email","providers":["email"]}',
+    '{"login_id":"Pradeepkumar.nb@gmail.com","full_name":"Pradeep Kumar N B","role":"super_admin"}',
     '', '')
   on conflict (id) do nothing;
 
@@ -147,6 +161,8 @@ begin
   insert into profiles (id, login_id, full_name, role, college_id, branch_id, is_active, must_change_password)
   values
     (super_uid, 'super.admin', 'Platform Controller (Vidyavahini Group)', 'super_admin',
+     null, null, true, false),
+    (super_uid_2, 'Pradeepkumar.nb@gmail.com', 'Pradeep Kumar N B', 'super_admin',
      null, null, true, false),
     (principal_uid, 'vimtech.principal', 'VIMTECH Branch Principal', 'branch_principal',
      '11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', true, false),

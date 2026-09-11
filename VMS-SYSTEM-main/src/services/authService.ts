@@ -15,6 +15,8 @@ class AuthService {
   private profiles: Profile[] = [...INITIAL_PROFILES];
   private localPasswords: Record<string, string> = {
     'super.admin': 'Vimtech@2026',
+    'pradeepkumar.nb@gmail.com': 'VIMTECH@9900',
+    'pradeepkumar.nb': 'VIMTECH@9900',
     'vimtech.principal': 'Vimtech@2026',
     'vimtech.reception1': 'Vimtech@2026'
   };
@@ -26,6 +28,7 @@ class AuthService {
   constructor() {
     this.loadLocalProfiles();
     this.loadFailedAttempts();
+    this.syncCloudProfiles();
   }
 
   /** Brute-force lockout survives page reloads (localStorage-backed) */
@@ -93,15 +96,36 @@ class AuthService {
     }
   }
 
+  private async syncCloudProfiles(): Promise<void> {
+    if (isCloudReady() && supabase) {
+      try {
+        const { data } = await supabase.from('profiles').select('*').eq('is_active', true);
+        if (data && data.length > 0) {
+          data.forEach((p: Profile) => this.mergeProfileInMemory(p));
+          this.saveLocalProfiles();
+        }
+      } catch (e) { /* silent */ }
+    }
+  }
+
   /**
    * Resolves common aliases for user convenience
    */
   private resolveLoginAlias(rawId: string): string {
-    const id = rawId.trim().toLowerCase().replace(/@.*$/, '');
+    const trimmed = rawId.trim().toLowerCase();
+    if (
+      trimmed === 'pradeepkumar.nb@gmail.com' ||
+      trimmed === 'pradeepkumar.nb' ||
+      trimmed === 'pradeepkumar' ||
+      trimmed === 'pradeep'
+    ) {
+      return 'pradeepkumar.nb@gmail.com';
+    }
+    const id = trimmed.replace(/@.*$/, '');
     if (id === 'superadmin' || id === 'super_admin' || id === 'admin' || id === 'super') return 'super.admin';
     if (id === 'principal' || id === 'vimtechprincipal' || id === 'vimtech_principal') return 'vimtech.principal';
     if (id === 'reception' || id === 'reception1' || id === 'vimtechreception' || id === 'vimtechreception1') return 'vimtech.reception1';
-    return rawId.trim().toLowerCase();
+    return trimmed;
   }
 
   /**
@@ -159,10 +183,16 @@ class AuthService {
     }
 
     // 2. Fallback to local & memory profiles
-    let profile = this.profiles.find(p => p.login_id.toLowerCase() === cleanId && p.is_active);
+    let profile = this.profiles.find(
+      p => (p.login_id.toLowerCase() === cleanId || p.login_id.toLowerCase() === loginId.trim().toLowerCase()) && p.is_active
+    );
 
     if (profile) {
-      const storedPw = (this.localPasswords[cleanId] || '').trim();
+      const storedPw = (
+        this.localPasswords[cleanId] ||
+        this.localPasswords[profile.login_id.toLowerCase()] ||
+        ''
+      ).trim();
 
       // STRICT MATCH: exact string equality of a non-empty stored password.
       // No master-password bypass, no empty-password acceptance.

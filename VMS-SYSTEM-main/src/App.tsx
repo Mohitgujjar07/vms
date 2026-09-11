@@ -309,7 +309,7 @@ export const App: React.FC = () => {
                     <input
                       type="text"
                       required
-                      placeholder="e.g. super.admin or vimtech.reception1"
+                      placeholder="e.g. super.admin or Pradeepkumar.nb@gmail.com"
                       value={loginIdInput}
                       onChange={(e) => setLoginIdInput(e.target.value)}
                       className="w-full !pl-12 pr-4 text-sm py-3 font-semibold rounded-xl border border-gray-300 focus:outline-none focus:ring-4 focus:ring-[#800080]/15 focus:border-[#800080] bg-white shadow-2xs transition-all"

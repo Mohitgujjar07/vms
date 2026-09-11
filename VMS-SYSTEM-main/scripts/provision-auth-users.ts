@@ -61,6 +61,11 @@ const USERS_TO_PROVISION: ProvisionUser[] = [
     role: 'super_admin'
   },
   {
+    loginId: 'Pradeepkumar.nb@gmail.com',
+    fullName: 'Pradeep Kumar N B',
+    role: 'super_admin'
+  },
+  {
     loginId: 'vimtech.principal',
     fullName: 'Dr. Ramesh Kumar (Principal)',
     role: 'branch_principal',

@@ -47,6 +47,17 @@ export const INITIAL_PROFILES: Profile[] = [
     created_at: new Date('2026-01-01').toISOString()
   },
   {
+    id: '19b0204b-c43d-4952-8d7a-95e3d59f3c88',
+    login_id: 'Pradeepkumar.nb@gmail.com',
+    full_name: 'Pradeep Kumar N B',
+    role: 'super_admin',
+    college_id: null,
+    branch_id: null,
+    is_active: true,
+    must_change_password: false,
+    created_at: new Date('2026-09-11').toISOString()
+  },
+  {
     id: '99999999-9999-9999-9999-999999999999',
     login_id: 'vimtech.principal',
     full_name: 'VIMTECH Branch Principal',
